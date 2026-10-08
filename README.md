@@ -16,6 +16,45 @@ Open http://localhost:3000. Data lives in your browser under the key
 `axl-books-db-v1`. Use **Settings → Data tools** to download JSON backups and
 restore them (e.g. to move data between machines or browsers).
 
+## Hosting on Netlify (cloud workflows)
+
+The repo ships with everything needed to run the app **and its automations in
+the cloud**:
+
+| Piece | Where it runs | File |
+|---|---|---|
+| App + API routes | Netlify (Next.js runtime) | `netlify.toml` |
+| CI — typecheck + build on every push/PR | GitHub Actions | `.github/workflows/ci.yml` |
+| Dues sweep every 6 h (cloud cron) | GitHub Actions → deployed site | `.github/workflows/dues-cron.yml` |
+
+### One-time setup
+
+1. **Netlify:** connect the repo, then set environment variables in
+   *Site configuration → Environment variables*:
+   - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `SUPABASE_SERVICE_ROLE_KEY` (server-only — powers account management + dues checks)
+   - `CRON_SECRET` (any long random string — authorizes the cloud cron)
+2. **GitHub:** in *Settings → Secrets and variables → Actions*, add:
+   - `SITE_URL` — your Netlify URL, e.g. `https://axl-books.netlify.app`
+   - `CRON_SECRET` — the same value as above
+
+The scheduled sweep then runs entirely in the cloud: GitHub Actions calls
+`POST /api/dues/check` on your Netlify site every 6 hours (also triggerable
+manually from the Actions tab via *Run workflow*).
+
+### A note on the browser-based checkers
+
+Salik / Dubai Police / Ajman Sewerage live checks drive a real Chrome via
+patchright + ffmpeg — a **desktop-server** capability that serverless
+functions don't have. On Netlify those providers degrade gracefully to a
+"manual" status (HTTP-only providers — Etihad WE, du, e& — still fully work).
+Two ways to restore live browser checks:
+
+- Leave the app running on an always-on desktop/server too (in-process
+  scheduler handles it there — the scheduler auto-disables itself on Netlify), or
+- Point `DUES_WORKER_URL` (Netlify env var) at a small always-on machine
+  running the worker HTTP bridge; Netlify functions then proxy browser ops to it.
+
 Press **N** anywhere for Quick Entry. Enter saves and stays open for the next bill.
 
 ## What's inside

@@ -24,6 +24,53 @@ import fs from "node:fs";
 
 export type Scraped = { amount_due: number | null; message: string; extra?: Record<string, unknown> };
 
+/**
+ * The captcha worker needs patchright + a real headed Chrome + ffmpeg — a
+ * desktop-server capability. On serverless hosts (Netlify/Vercel Lambdas)
+ * there is no display and no bundled Chrome, so every browser check reports
+ * "manual" instead of crashing. HTTP-only checkers (Etihad WE, du, e&) are
+ * unaffected. Point DUES_WORKER_URL at a always-on machine (e.g. the office
+ * PC or a small VPS) running `node scripts/dues-captcha-worker-server.mjs`
+ * to get live browser-based checks back on serverless.
+ */
+const REMOTE_WORKER_URL = process.env.DUES_WORKER_URL ?? "";
+
+async function callRemoteWorker<T>(op: string, args: Record<string, unknown>): Promise<T> {
+  const res = await fetch(REMOTE_WORKER_URL, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ op, ...args }),
+    signal: AbortSignal.timeout(240_000),
+  });
+  const json = (await res.json().catch(() => null)) as { ok?: boolean; data?: T; error?: string } | null;
+  if (!res.ok || !json?.ok) throw new Error(json?.error || "remote captcha worker failed (HTTP " + res.status + ")");
+  return json.data as T;
+}
+
+function isServerless(): boolean {
+  return !!(
+    process.env.NETLIFY ||
+    process.env.VERCEL ||
+    process.env.AWS_LAMBDA_FUNCTION_NAME
+  );
+}
+
+/**
+ * Browser ops route to the remote worker when DUES_WORKER_URL is set, else to
+ * the local patchright worker (desktop servers only). On serverless with no
+ * remote worker we throw — callers in dues-checkers.ts catch this and fall
+ * back to the reachability probe (status "manual"), so the pipeline never
+ * crashes just because it's hosted on a function platform.
+ */
+async function browserCheck<T>(
+  op: string,
+  args: Record<string, unknown>
+): Promise<T> {
+  if (REMOTE_WORKER_URL) return callRemoteWorker<T>(op, args);
+  if (isServerless()) throw new Error("__SERVERLESS_NO_BROWSER__");
+  return withRetry(() => callWorker<T>(op, args));
+}
+
 type Pending = { resolve: (v: never) => void; reject: (e: Error) => void; timer: NodeJS.Timeout };
 type WorkerMsg = { id: number; ok: boolean; data?: unknown; error?: string };
 
@@ -120,7 +167,7 @@ async function withRetry<T>(fn: () => Promise<T>, attempts = 2, waitMs = 20_000)
 export async function ajmanSewerageDue(fields: Record<string, string>): Promise<Scraped> {
   const acc = (fields.account_number ?? "").trim();
   if (!acc) throw new Error("Ajman Sewerage check needs an account number.");
-  const out = await withRetry(() => callWorker<{ results?: Array<{ due?: number | null; premise?: string | null; raw?: string | null }> }>("ajman-due", { accounts: [acc] }));
+  const out = await browserCheck<{ results?: Array<{ due?: number | null; premise?: string | null; raw?: string | null }> }>("ajman-due", { accounts: [acc] });
   const r = out?.results?.[0];
   if (!r) throw new Error("Ajman Sewerage: no result returned.");
   if (r.due === null || r.due === undefined) {
@@ -134,18 +181,20 @@ export async function ajmanSewerageDue(fields: Record<string, string>): Promise<
 }
 
 export async function salikBalance(fields: Record<string, string>): Promise<Scraped> {
-  const out = await withRetry(() => callWorker<{ amount_due: number; message: string; extra?: Record<string, unknown> }>("salik-balance", fields));
+  const out = await browserCheck<{ amount_due: number; message: string; extra?: Record<string, unknown> }>("salik-balance", fields);
   return { amount_due: Number(out.amount_due), message: String(out.message), extra: out.extra };
 }
 
 export async function dubaiPoliceFines(fields: Record<string, string>): Promise<Scraped> {
-  const out = await withRetry(() => callWorker<{ amount_due: number; message: string; extra?: Record<string, unknown> }>("dubai-fines", fields));
+  const out = await browserCheck<{ amount_due: number; message: string; extra?: Record<string, unknown> }>("dubai-fines", fields);
   return { amount_due: Number(out.amount_due), message: String(out.message), extra: out.extra };
 }
 
 /** Fire-and-forget health probe used by the scheduler warm-up. */
 export async function workerPing(): Promise<boolean> {
   try {
+    if (REMOTE_WORKER_URL) return await callRemoteWorker("ping", {});
+    if (isServerless()) return false;
     await callWorker("ping", {}, 30_000);
     return true;
   } catch {

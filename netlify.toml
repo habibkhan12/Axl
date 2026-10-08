@@ -1,0 +1,27 @@
+# Netlify deployment for AXL Books (Next.js 15 + Supabase)
+# Docs: https://docs.netlify.com/integrations/frameworks/next-js/
+
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "20"
+  # Netlify's Next runtime builds the app and wires up functions/edge —
+  # it is enabled by default when netlify.toml exists; nothing else to set here.
+
+# The dues sweep is NOT run from the in-process scheduler on Netlify (functions
+# are ephemeral and the captcha browser worker needs a desktop host).
+# A GitHub Actions cron (.github/workflows/dues-cron.yml) calls
+# POST /api/dues/check with the CRON_SECRET instead — see that file.
+
+# All secrets (NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY,
+# SUPABASE_SERVICE_ROLE_KEY, CRON_SECRET, optional DUES_WORKER_URL) are set in
+# Site configuration → Environment variables — never in this file.
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"

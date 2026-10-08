@@ -1,0 +1,45 @@
+name: Dues sweep (cloud cron)
+
+# The in-process dues scheduler is disabled on Netlify (functions are
+# ephemeral and the browser-based checkers need a desktop host). This workflow
+# is the cloud replacement: on a schedule it calls the deployed app's
+# POST /api/dues/check endpoint with CRON_SECRET, and every active dues
+# account gets checked. HTTP-only providers (Etihad WE, du, e&) return real
+# reachability statuses; browser-based providers (Salik, Dubai Police, Ajman
+# Sewerage) report "manual" unless DUES_WORKER_URL points at a worker host
+# (see scripts/dues-worker-server.mjs).
+
+on:
+  schedule:
+    - cron: "17 */6 * * *" # every 6 hours at :17 (offset avoids the top-of-hour GitHub cron rush)
+  workflow_dispatch: {} # manual trigger from the Actions tab
+
+concurrency:
+  group: dues-sweep
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger dues check on the deployed site
+        env:
+          SITE_URL: ${{ secrets.SITE_URL }} # e.g. https://axl-books.netlify.app
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$SITE_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "::error::Set SITE_URL and CRON_SECRET in the repo's Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+          http=$(curl -s -o /tmp/dues.json -w "%{http_code}" -X POST \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            -H "Content-Type: application/json" \
+            -d '{}' \
+            --max-time 900 \
+            "$SITE_URL/api/dues/check")
+          echo "HTTP $http"
+          cat /tmp/dues.json
+          if [ "$http" != "200" ]; then
+            echo "::error::Dues sweep failed (HTTP $http)."
+            exit 1
+          fi

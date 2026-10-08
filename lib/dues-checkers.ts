@@ -56,6 +56,15 @@ async function reachabilityCheck(name: string, url: string): Promise<DuesCheckOu
 
 type Checker = (fields: Record<string, string>) => Promise<DuesCheckOutcome>;
 
+/**
+ * When a browser-based checker reports the serverless marker (no patchright/
+ * Chrome on this host), swap it for the plain reachability probe with a clean
+ * "manual" status instead of leaking the internal marker text.
+ */
+function isNoBrowserMarker(reason: string): boolean {
+  return reason.includes("__SERVERLESS_NO_BROWSER__");
+}
+
 const CHECKERS: Record<string, Checker> = {
   evg: async () => ({
     status: "manual",
@@ -67,6 +76,8 @@ const CHECKERS: Record<string, Checker> = {
       return { status: "ok", amount_due: r.amount_due, message: r.message, extra: r.extra };
     } catch (e) {
       const reason = e instanceof Error ? e.message : String(e);
+      if (isNoBrowserMarker(reason))
+        return { status: "manual", message: "Dubai Police: automated checking runs on the scheduled worker host — check manually here meanwhile." };
       const probe = await reachabilityCheck("Dubai Police", "https://www.dubaipolice.gov.ae/app/services/fine-payment/search");
       return { ...probe, message: reason + " — " + probe.message };
     }
@@ -79,6 +90,8 @@ const CHECKERS: Record<string, Checker> = {
       return { status: "ok", amount_due: r.amount_due, message: r.message, extra: r.extra };
     } catch (e) {
       const reason = e instanceof Error ? e.message : String(e);
+      if (isNoBrowserMarker(reason))
+        return { status: "manual", message: "Ajman Sewerage: automated checking runs on the scheduled worker host — check manually here meanwhile." };
       const probe = await reachabilityCheck("Ajman Sewerage", "https://www.ajmansewerage.ae/quickpay");
       return { ...probe, message: reason + " — " + probe.message };
     }
@@ -95,6 +108,8 @@ const CHECKERS: Record<string, Checker> = {
       return { status: "ok", amount_due: r.amount_due, message: r.message, extra: r.extra };
     } catch (e) {
       const reason = e instanceof Error ? e.message : String(e);
+      if (isNoBrowserMarker(reason))
+        return { status: "manual", message: "Salik: automated checking runs on the scheduled worker host — check manually here meanwhile." };
       const probe = await reachabilityCheck("Salik", "https://www.salik.ae/en/support/salik-services-catalog/recharge-a-salik-account");
       return { ...probe, message: reason + " — " + probe.message };
     }
