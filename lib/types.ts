@@ -14,17 +14,6 @@ export interface TabAccessMap {
   fleet?: TabAccess;
   dues?: TabAccess;
 }
-export type PartyType = "client" | "supplier" | "both";
-
-export interface Party {
-  id: string;
-  name: string;
-  phone?: string;
-  type: PartyType;
-  notes?: string;
-  archived?: boolean;
-}
-
 export interface Vehicle {
   id: string;
   label: string; // "Accord Silver"
@@ -61,7 +50,6 @@ export interface Transaction {
   kind: Kind;
   txn_date: string; // ISO yyyy-mm-dd (business date)
   amount: number; // always positive
-  party_id?: string | null;
   category_id?: string | null;
   payment_method_id?: string | null;
   vehicle_id?: string | null; // only meaningful for Fuel / Vehicles
@@ -91,7 +79,6 @@ export interface Settings {
 }
 
 export interface Database {
-  parties: Party[];
   vehicles: Vehicle[];
   categories: Category[];
   payment_methods: PaymentMethod[];

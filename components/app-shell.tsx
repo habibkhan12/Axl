@@ -6,10 +6,8 @@ import { ArrowLeftRight, Bell, CarFront, Grid2X2, Landmark, LogOut, Menu, PanelL
 import type { Kind } from "@/lib/types";
 import { DbProvider, useDbContext, canViewPage } from "@/lib/local-db";
 import { activeUser } from "@/lib/repo";
-import { todayISO } from "@/lib/format";
 import { AuthGate } from "@/components/auth-gate";
 import { Avatar, useKeyboardShortcut } from "@/components/ui";
-import { Dropdown, MenuItem } from "@/components/ui";
 import { loadNotifs, markAllRead, type NotifEvent } from "@/lib/notifications";
 
 function NotificationBell() {
@@ -128,7 +126,7 @@ function Shell({ children }: { children: React.ReactNode }) {
   }, []);
   const scrollRef = React.useRef<HTMLElement | null>(null);
   const [mobileNav, setMobileNav] = useState(false);
-  const { session, profile, role, canWrite, canEdit, signOut } = useDbContext();
+  const { session, profile, role, canEdit, signOut } = useDbContext();
 
   // Restricted accounts only see the tabs they were granted (admins see all).
   const visibleNav = NAV.filter((item) => canViewPage(item.href, profile, role));
@@ -182,7 +180,6 @@ function Shell({ children }: { children: React.ReactNode }) {
     : { ...activeUser(db), avatar_url: null as string | null };
   const email = session?.user?.email ?? localUser?.email ?? "";
   const pageLabel = PAGE_LABELS[pathname] ?? pathname;
-  const todayCount = db.transactions.filter((t) => t.txn_date === todayISO()).length;
   const width = collapsed ? "w-[68px]" : "w-[232px]";
 
   return (

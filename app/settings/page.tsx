@@ -79,7 +79,7 @@ const WIDE = "max-w-5xl";
 
 export default function SettingsPage() {
   const { db, setDb } = useDb();
-  const { session, role } = useDbContext();
+  const { session } = useDbContext();
   const [section, setSection] = useState<Section>("details");
   const [toast, setToast] = useState<string | null>(null);
   const isSignedIn = !!session;
@@ -110,7 +110,6 @@ export default function SettingsPage() {
       {section === "notifications" ? <NotificationsSection onToast={setToast} /> : null}
       {section === "appearance" ? <AppearanceSection onToast={setToast} /> : null}
       {section === "team" ? <TeamSection collections={{ db, setDb }} onToast={setToast} /> : null}
-      {section === "team" && role === "owner" ? null : null}
       {section === "general" ? <GeneralSection db={db} setDb={setDb} onToast={setToast} /> : null}
       {section === "data" ? <DataSection db={db} setDb={setDb} onToast={setToast} signedIn={isSignedIn} /> : null}
 

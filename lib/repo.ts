@@ -14,7 +14,6 @@ export function addTransaction(db: Database, input: TransactionInput): Database 
     kind: input.kind,
     txn_date: input.txn_date,
     amount: Math.abs(input.amount),
-    party_id: input.party_id ?? null,
     category_id: input.category_id ?? null,
     payment_method_id: input.payment_method_id ?? null,
     vehicle_id: input.vehicle_id ?? null,
@@ -67,21 +66,7 @@ export function archiveRef(db: Database, table: "categories" | "vehicles" | "pay
   return { ...db, payment_methods: db.payment_methods.map((p) => (p.id === id ? { ...p, archived } : p)) };
 }
 
-// ─── Users & settings ────────────────────────────────────────────────────────
-
-export function upsertUser(db: Database, u: User): Database {
-  const exists = db.users.some((x) => x.id === u.id);
-  return { ...db, users: exists ? db.users.map((x) => (x.id === u.id ? u : x)) : [...db.users, u] };
-}
-
-export function setActiveUser(db: Database, userId: string): Database {
-  return { ...db, settings: { ...db.settings, active_user_id: userId } };
-}
-
-export function setMonthlyTarget(db: Database, target: number): Database {
-  return { ...db, settings: { ...db.settings, monthly_income_target: target } };
-}
-
+// ─── The seeded active user (cloud mode resolves authors via auth instead) ───
 export function activeUser(db: Database): User {
   return db.users.find((u) => u.id === db.settings.active_user_id) ?? db.users[0];
 }

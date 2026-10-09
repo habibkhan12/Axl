@@ -5,7 +5,7 @@
  * Indexes EVERY detail across the platform: transactions (job ref, voucher,
  * description, notes, category, method, amount, date), fleet (label, plate,
  * owner, TC number, Salik mobile/account/tag), dues accounts (provider,
- * label, account numbers), parties, categories, payment methods, plus page
+ * label, account numbers), categories, payment methods, plus page
  * navigation and quick actions.
  *
  * Matching is semantic-ish: normalization (case/whitespace/diacritics),
@@ -102,14 +102,12 @@ export function CommandPalette({ open, onClose, db }: { open: boolean; onClose: 
 
     const nameOfCat = (id: string | null | undefined) => db.categories.find((c) => c.id === id)?.name ?? "";
     const nameOfMethod = (id: string | null | undefined) => db.payment_methods.find((m) => m.id === id)?.name ?? "";
-    const nameOfParty = (id: string | null | undefined) => db.parties.find((p) => p.id === id)?.name ?? "";
     const nameOfVehicle = (id: string | null | undefined) => db.vehicles.find((v) => v.id === id)?.label ?? "";
 
     // ── Transactions ────────────────────────────────────────────────────────
     const txnDocs: SearchDoc[] = db.transactions.map((t) => {
       const cat = nameOfCat(t.category_id);
       const method = nameOfMethod(t.payment_method_id);
-      const party = nameOfParty(t.party_id);
       const vehicle = nameOfVehicle(t.vehicle_id);
       const title = t.description || cat || (t.kind === "income" ? "Income" : "Expense");
       return {
@@ -117,7 +115,7 @@ export function CommandPalette({ open, onClose, db }: { open: boolean; onClose: 
         group: "Transactions",
         title,
         sub: (t.job_ref ? t.job_ref + " · " : "") + fmtDate(t.txn_date) + " · " + fmtAED(t.amount),
-        fields: [title, cat, method, party, vehicle, t.job_ref ?? "", t.voucher_no ?? "", t.notes ?? "", String(t.amount), t.txn_date, fmtDate(t.txn_date)],
+        fields: [title, cat, method, vehicle, t.job_ref ?? "", t.voucher_no ?? "", t.notes ?? "", String(t.amount), t.txn_date, fmtDate(t.txn_date)],
         digits: [t.job_ref ?? "", t.voucher_no ?? "", String(Math.round(t.amount))],
         keywords: [t.kind === "income" ? "income in" : "expense out"],
         run: () => { router.push("/transactions#txn-" + encodeURIComponent(t.id)); onClose(); },
@@ -151,7 +149,7 @@ export function CommandPalette({ open, onClose, db }: { open: boolean; onClose: 
       run: () => { router.push("/dues#dues-" + encodeURIComponent(a.id)); onClose(); },
     }));
 
-    // Categories & payment methods & parties → jump to settings ref editors / transactions filtered
+    // Categories & payment methods → jump to the entry that uses them
     const refDocs: SearchDoc[] = [
       ...db.categories.map((c) => {
         const best = db.transactions
@@ -191,25 +189,6 @@ export function CommandPalette({ open, onClose, db }: { open: boolean; onClose: 
           },
         };
       }),
-      ...db.parties.map((p) => ({
-        key: "p-" + p.id,
-        group: "Parties",
-        title: p.name,
-        sub: p.type === "both" ? "Client & supplier" : p.type === "client" ? "Client" : "Supplier",
-        fields: [p.name, p.phone ?? ""],
-        digits: [p.phone ?? ""],
-        keywords: ["party", "client", "supplier", "customer"],
-        // Open the party's most recent transaction directly in its slide-over
-        // panel — a party with no entries yet just lands on the ledger.
-        run: () => {
-          const best = db.transactions
-            .filter((t) => t.party_id === p.id || (t.notes ?? "").includes(p.name) || (t.description ?? "").includes(p.name))
-            .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))[0];
-          if (best) router.push("/transactions#txn-" + encodeURIComponent(best.id));
-          else router.push("/transactions");
-          onClose();
-        },
-      })),
     ];
 
     const allDocs = [...staticDocs, ...txnDocs, ...carDocs, ...duesDocs, ...refDocs];

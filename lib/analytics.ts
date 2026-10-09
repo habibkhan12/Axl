@@ -1,6 +1,6 @@
 // ─── Analytics engine — pure functions over transactions ────────────────────
 import type { Database, Transaction, Kind } from "./types";
-import { monthOf, daysInMonth, toISO } from "./format";
+import { daysInMonth, toISO } from "./format";
 
 export interface Totals {
   income: number;
@@ -186,10 +186,6 @@ export function projectedMonthEndIncome(rows: Transaction[], ym: string, target:
     dayOfMonth,
     totalDays,
   };
-}
-
-export function monthOfTxn(t: Transaction): string {
-  return monthOf(t.txn_date);
 }
 
 // ─── Kravio dashboard helpers ───────────────────────────────────────────────

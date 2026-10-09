@@ -190,18 +190,6 @@ export async function dubaiPoliceFines(fields: Record<string, string>): Promise<
   return { amount_due: Number(out.amount_due), message: String(out.message), extra: out.extra };
 }
 
-/** Fire-and-forget health probe used by the scheduler warm-up. */
-export async function workerPing(): Promise<boolean> {
-  try {
-    if (REMOTE_WORKER_URL) return await callRemoteWorker("ping", {});
-    if (isServerless()) return false;
-    await callWorker("ping", {}, 30_000);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 export function stopDuesWorker() {
   killWorker();
 }

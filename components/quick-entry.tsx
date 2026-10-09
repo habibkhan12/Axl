@@ -76,7 +76,6 @@ export function QuickEntry({
       kind,
       txn_date: date,
       amount: amt,
-      party_id: null,
       category_id: categoryId || null,
       payment_method_id: methodId || null,
       vehicle_id: isFuel ? vehicleId || null : null,
