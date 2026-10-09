@@ -7,6 +7,10 @@
 
 [build.environment]
   NODE_VERSION = "20"
+  # The Supabase anon/publishable key is meant to be public: Next.js inlines
+  # NEXT_PUBLIC_* values into the bundles, so exclude it from secrets scanning.
+  # Real secrets (service role key, CRON_SECRET) are still scanned.
+  SECRETS_SCAN_OMIT_KEYS = "NEXT_PUBLIC_SUPABASE_ANON_KEY"
   # Netlify's Next runtime builds the app and wires up functions/edge —
   # it is enabled by default when netlify.toml exists; nothing else to set here.
 
