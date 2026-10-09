@@ -49,19 +49,6 @@ export const SEED_PAYMENT_METHODS: PaymentMethod[] = [
 
 export function freshDb(): Database {
   return {
-    parties: [
-      { id: "p_barrel", name: "Barrel Energy LLC", type: "client" },
-      { id: "p_designdesk", name: "Design Desk Interiors LLC", type: "client" },
-      { id: "p_hinjam", name: "Hinjam Contracting LLC", type: "client" },
-      { id: "p_nhaluminum", name: "NH Aluminum and Glass Works", type: "client" },
-      { id: "p_walkin", name: "Walk in", type: "client" },
-      { id: "p_redsea", name: "Red Sea Aluminium & Glass Co. LLC", type: "supplier" },
-      { id: "p_adnoc", name: "Fuel (Adnoc)", type: "supplier" },
-      { id: "p_emarat", name: "Fuel (Emarat)", type: "supplier" },
-      { id: "p_enoc", name: "Fuel (Enoc)", type: "supplier" },
-      { id: "p_etisalat", name: "Etisalat", type: "supplier" },
-      { id: "p_etihadwe", name: "Etihad WE", type: "supplier" },
-    ],
     categories: SEED_CATEGORIES,
     vehicles: SEED_VEHICLES,
     payment_methods: SEED_PAYMENT_METHODS,

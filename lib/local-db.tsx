@@ -59,7 +59,6 @@ interface DbContextValue {
   session: Session | null;
   profile: Profile | null;
   role: Role;
-  isViewer: boolean;
   canWrite: boolean;
   tabAccess: (tab: Exclude<TabKey, "settings">) => TabAccess;
   canView: (pathname: string) => boolean;
@@ -68,7 +67,6 @@ interface DbContextValue {
   signUp: (email: string, password: string, name: string) => Promise<string | null>;
   signOut: () => Promise<void>;
   refresh: () => Promise<void>;
-  mirror: (fn: (prev: Database) => Database, undo?: (prev: Database) => void) => void;
 }
 
 const DbContext = createContext<DbContextValue>({
@@ -79,7 +77,6 @@ const DbContext = createContext<DbContextValue>({
   session: null,
   profile: null,
   role: "viewer",
-  isViewer: true,
   canWrite: false,
   tabAccess: () => "none",
   canView: () => false,
@@ -88,7 +85,6 @@ const DbContext = createContext<DbContextValue>({
   signUp: async () => "not ready",
   signOut: async () => {},
   refresh: async () => {},
-  mirror: () => {},
 });
 
 function readLocalDb(): Database | null {
@@ -279,13 +275,6 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("axl-profile-updated", handler);
   }, [session]);
 
-  // Apply a local optimistic change, then mirror the write to Supabase.
-  // In cloud mode a diff-sync effect (below) pushes every change automatically;
-  // this function exists for API compatibility with direct-mutation call sites.
-  function mirror(fn: (prev: Database) => Database): void {
-    setDb((prev) => (prev ? fn(prev) : prev));
-  }
-
   // Keep the last snapshot we successfully loaded/pushed so we can diff changes.
   const snapshotRef = React.useRef<Database | null>(null);
   const syncingRef = React.useRef(false);
@@ -462,7 +451,6 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
       session,
       profile,
       role,
-      isViewer: role === "viewer",
       canWrite: role === "owner" || role === "editor",
       tabAccess: (tab: Exclude<TabKey, "settings">) => tabAccessOf(profile, role, tab),
       canView: (pathname: string) => canViewPage(pathname, profile, role),
@@ -471,7 +459,6 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
       signUp,
       signOut,
       refresh,
-      mirror,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [db, hydrated, authChecked, session, profile, role]
@@ -488,9 +475,4 @@ export function useDb(): { db: Database; hydrated: boolean; setDb: React.Dispatc
   const ctx = useContext(DbContext);
   if (!ctx.db) throw new Error("useDb used before hydration");
   return { db: ctx.db, hydrated: ctx.hydrated, setDb: ctx.setDb };
-}
-
-export function useCurrentUser() {
-  const { db } = useDb();
-  return db.users[0];
 }

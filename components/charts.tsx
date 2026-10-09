@@ -1,6 +1,6 @@
 "use client";
 import React, { useEffect, useMemo, useState } from "react";
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, BarChart, Bar, ReferenceLine, ComposedChart, Line } from "recharts";
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, Bar, ReferenceLine, ComposedChart, Line } from "recharts";
 import { fmtAED, fmtWeekday, todayISO } from "@/lib/format";
 import type { DayPoint } from "@/lib/analytics";
 

@@ -4,10 +4,6 @@ import { duesProviderOf } from "@/lib/dues-providers";
 
 export const dynamic = "force-dynamic";
 
-function bearer(req: Request): string {
-  return (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "").trim();
-}
-
 /** GET — accounts (all) + check history (last 30 days) for the Dues page. */
 export async function GET(req: Request) {
   const gate = await requireDues(req, "view");
