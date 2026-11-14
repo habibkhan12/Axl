@@ -70,6 +70,20 @@ create table if not exists public.payment_methods (
   archived boolean not null default false
 );
 
+-- Suppliers (kind = 'supplier') and clients (kind = 'client').
+create table if not exists public.parties (
+  id text primary key,
+  kind text not null check (kind in ('supplier','client')),
+  name text not null,
+  phone text,
+  email text,
+  notes text,
+  archived boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists parties_kind_name_idx on public.parties (kind, name);
+
 -- 4. TRANSACTIONS
 create table if not exists public.transactions (
   id text primary key,
@@ -209,6 +223,12 @@ drop policy if exists pm_read on public.payment_methods;
 create policy pm_read on public.payment_methods for select to authenticated using (true);
 drop policy if exists pm_write on public.payment_methods;
 create policy pm_write on public.payment_methods for all to authenticated
+  using (public.my_role() in ('owner','editor')) with check (public.my_role() in ('owner','editor'));
+
+drop policy if exists party_read on public.parties;
+create policy party_read on public.parties for select to authenticated using (true);
+drop policy if exists party_write on public.parties;
+create policy party_write on public.parties for all to authenticated
   using (public.my_role() in ('owner','editor')) with check (public.my_role() in ('owner','editor'));
 
 -- Transactions: everyone reads; owner/editor write; viewer is read-only at DB level

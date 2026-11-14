@@ -5,12 +5,14 @@ export type Role = "owner" | "editor" | "viewer";
 
 /** Per-tab access level. "none" = tab hidden entirely. */
 export type TabAccess = "none" | "view" | "edit";
-export type TabKey = "dashboard" | "transactions" | "fleet" | "dues" | "settings";
+export type TabKey = "dashboard" | "transactions" | "suppliers" | "clients" | "fleet" | "dues" | "settings";
 
 /** What tabs a non-admin account can see/edit. Admin always sees everything. */
 export interface TabAccessMap {
   dashboard?: TabAccess;
   transactions?: TabAccess;
+  suppliers?: TabAccess;
+  clients?: TabAccess;
   fleet?: TabAccess;
   dues?: TabAccess;
 }
@@ -30,6 +32,20 @@ export interface Vehicle {
   salik_account?: string | null;
   salik_tag?: string | null;
   salik_code?: string | null;
+}
+
+/** A supplier (paid on expenses) or a client (paid us on income). */
+export type PartyKind = "supplier" | "client";
+
+export interface Party {
+  id: string;
+  kind: PartyKind;
+  name: string;
+  phone?: string | null;
+  email?: string | null;
+  notes?: string | null;
+  archived?: boolean;
+  created_at?: string;
 }
 
 export interface Category {
@@ -52,6 +68,8 @@ export interface Transaction {
   amount: number; // always positive
   category_id?: string | null;
   payment_method_id?: string | null;
+  /** Supplier on an expense, client on an income entry. */
+  party_id?: string | null;
   vehicle_id?: string | null; // only meaningful for Fuel / Vehicles
   fuel_liters?: number | null;
   job_ref?: string | null; // "AY12017"
@@ -80,6 +98,7 @@ export interface Settings {
 
 export interface Database {
   vehicles: Vehicle[];
+  parties: Party[];
   categories: Category[];
   payment_methods: PaymentMethod[];
   transactions: Transaction[];

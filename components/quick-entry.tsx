@@ -1,11 +1,12 @@
 "use client";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import type { Database, Kind } from "@/lib/types";
+import type { Database, Kind, PartyKind } from "@/lib/types";
 import type { TransactionInput } from "@/lib/store";
-import { addTransaction } from "@/lib/repo";
+import { addTransaction, ensureParty } from "@/lib/repo";
 import { todayISO, fmtAED } from "@/lib/format";
 import { Button, Input, Label, Modal, SelectMenu, Toast } from "@/components/ui";
 import { DatePicker } from "@/components/date-picker";
+import { PartyInput } from "@/components/party-input";
 import { useDbContext } from "@/lib/local-db";
 
 export function QuickEntry({
@@ -14,12 +15,15 @@ export function QuickEntry({
   db,
   setDb,
   initialKind = "expense",
+  initialParty = null,
 }: {
   open: boolean;
   onClose: () => void;
   db: Database;
   setDb: React.Dispatch<React.SetStateAction<Database | null>>;
   initialKind?: Kind;
+  /** Supplier/client profile the entry was started from — attached on save. */
+  initialParty?: { id: string; name: string } | null;
 }) {
   const { session, profile } = useDbContext();
   const [kind, setKind] = useState<Kind>(initialKind);
@@ -33,6 +37,8 @@ export function QuickEntry({
   const [jobRef, setJobRef] = useState("");
   const [voucher, setVoucher] = useState("");
   const [notes, setNotes] = useState("");
+  const [partyName, setPartyName] = useState("");
+  const [partyId, setPartyId] = useState<string | null>(null);
   const [keepEntering, setKeepEntering] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
   const [todayCount, setTodayCount] = useState(0);
@@ -42,9 +48,12 @@ export function QuickEntry({
   const methods = useMemo(() => db.payment_methods.filter((m) => !m.archived), [db.payment_methods]);
   const vehicles = useMemo(() => db.vehicles.filter((v) => !v.archived), [db.vehicles]);
   const isFuel = categoryId === "c_fuel" || categoryId === "c_vehicles";
+  const partyKind: PartyKind = kind === "expense" ? "supplier" : "client";
+  const partyList = useMemo(() => db.parties.filter((p) => p.kind === partyKind), [db.parties, partyKind]);
 
   useEffect(() => {
     if (!open) return;
+    setKind(initialKind);
     setDate(todayISO());
     setAmount("");
     setCategoryId("");
@@ -56,15 +65,21 @@ export function QuickEntry({
     setJobRef("");
     setVoucher("");
     setNotes("");
+    setPartyName(initialParty?.name ?? "");
+    setPartyId(initialParty?.id ?? null);
     const t = todayISO();
     setTodayCount(db.transactions.filter((x) => x.txn_date === t).length);
     setTimeout(() => amountRef.current?.focus(), 50);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  useEffect(() => {
+  /** Switching Income/Expense clears category and party (both are per-kind). */
+  function switchKind(next: Kind) {
+    setKind(next);
     setCategoryId("");
-  }, [kind]);
+    setPartyName("");
+    setPartyId(null);
+  }
 
   function save() {
     const amt = parseFloat(amount);
@@ -72,6 +87,7 @@ export function QuickEntry({
       setToast("Enter an amount first");
       return;
     }
+    const lockedParty = partyId ? db.parties.find((p) => p.id === partyId) ?? null : null;
     const input: TransactionInput = {
       kind,
       txn_date: date,
@@ -88,7 +104,17 @@ export function QuickEntry({
       // Local mode: the seeded active user id.
       created_by: session?.user?.id ?? profile?.id ?? db.settings.active_user_id,
     };
-    setDb((prev) => addTransaction(prev ?? db, input));
+    // Attach the party this entry was started from, or resolve/auto-create the
+    // typed name. Renaming a prefilled name falls back to a name lookup.
+    setDb((prev) => {
+      const base = prev ?? db;
+      const locked = partyId ? base.parties.find((p) => p.id === partyId) : null;
+      if (locked && locked.name.trim().toLowerCase() === partyName.trim().toLowerCase()) {
+        return addTransaction(base, { ...input, party_id: locked.id });
+      }
+      const { db: next, party } = ensureParty(base, partyKind, partyName);
+      return addTransaction(next, { ...input, party_id: party?.id ?? null });
+    });
     setTodayCount((n) => n + 1);
     setToast((kind === "income" ? "Income " : "Expense ") + fmtAED(amt) + " saved");
     if (!keepEntering) {
@@ -100,6 +126,8 @@ export function QuickEntry({
     setJobRef("");
     setVoucher("");
     setNotes("");
+    setPartyName(lockedParty ? lockedParty.name : "");
+    setPartyId(lockedParty ? lockedParty.id : null);
     setVehicleId("");
     setLiters("");
     setTimeout(() => amountRef.current?.focus(), 30);
@@ -118,7 +146,7 @@ export function QuickEntry({
         <div className="grid grid-cols-2 gap-2">
           <button
             type="button"
-            onClick={() => setKind("income")}
+            onClick={() => switchKind("income")}
             className={
               "rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all " +
               (kind === "income" ? "border-emerald-500/40 bg-emerald-50 text-emerald-700 shadow-[0_1px_2px_rgba(5,150,105,0.12)]" : "border-[#e5e5e2] bg-white text-zinc-500 hover:border-zinc-300")
@@ -128,7 +156,7 @@ export function QuickEntry({
           </button>
           <button
             type="button"
-            onClick={() => setKind("expense")}
+            onClick={() => switchKind("expense")}
             className={
               "rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all " +
               (kind === "expense" ? "border-red-500/40 bg-red-50 text-red-700 shadow-[0_1px_2px_rgba(220,38,38,0.12)]" : "border-[#e5e5e2] bg-white text-zinc-500 hover:border-zinc-300")
@@ -172,6 +200,23 @@ export function QuickEntry({
           </div>
         </div>
 
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div>
+            <Label>{kind === "expense" ? "Supplier" : "Client"}</Label>
+            <PartyInput
+              value={partyName}
+              onChange={setPartyName}
+              parties={partyList}
+              kindLabel={kind === "expense" ? "supplier" : "client"}
+              placeholder={kind === "expense" ? "Type a supplier — or a new one" : "Type a client — or a new one"}
+            />
+          </div>
+          <div>
+            <Label>{kind === "expense" ? "Bill / invoice no." : "Quotation no."}</Label>
+            <Input value={voucher} onChange={(e) => setVoucher(e.target.value)} placeholder="optional" />
+          </div>
+        </div>
+
         {isFuel && (
           <div className="grid grid-cols-2 gap-3 rounded-xl border border-[#e9e9e6] bg-[#fafaf9] p-3">
             <div>
@@ -193,10 +238,6 @@ export function QuickEntry({
           <div>
             <Label>Job ref</Label>
             <Input value={jobRef} onChange={(e) => setJobRef(e.target.value)} placeholder="AY12017" />
-          </div>
-          <div>
-            <Label>Voucher</Label>
-            <Input value={voucher} onChange={(e) => setVoucher(e.target.value)} placeholder="optional" />
           </div>
         </div>
 

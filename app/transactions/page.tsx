@@ -59,6 +59,7 @@ export default function TransactionsPage() {
     method: (id: string | null | undefined) => db.payment_methods.find((m) => m.id === id)?.name ?? "—",
     vehicle: (id: string | null | undefined) => db.vehicles.find((v) => v.id === id)?.label ?? "",
     user: (id: string) => db.users.find((u) => u.id === id)?.name ?? "—",
+    party: (id: string | null | undefined) => db.parties.find((p) => p.id === id)?.name ?? "—",
   };
 
   const rows = useMemo(() => {
@@ -69,7 +70,7 @@ export default function TransactionsPage() {
     const needle = q.trim().toLowerCase();
     if (needle) {
       list = list.filter((t) => {
-        const hay = [t.description, t.notes, t.job_ref, t.voucher_no, nameOf.category(t.category_id), nameOf.method(t.payment_method_id), String(t.amount)]
+        const hay = [t.description, t.notes, t.job_ref, t.voucher_no, nameOf.party(t.party_id), nameOf.category(t.category_id), nameOf.method(t.payment_method_id), String(t.amount)]
           .filter(Boolean)
           .join(" ")
           .toLowerCase();
@@ -128,9 +129,9 @@ export default function TransactionsPage() {
   }
 
   function exportCsv() {
-    const header = ["Date", "Type", "Category", "Method", "Job Ref", "Voucher", "Description", "Notes", "Amount", "Entered By"];
+    const header = ["Date", "Type", "Party", "Category", "Method", "Job Ref", "Voucher", "Description", "Notes", "Amount", "Entered By"];
     const lines = rows.map((t) =>
-      [t.txn_date, t.kind, nameOf.category(t.category_id), nameOf.method(t.payment_method_id), t.job_ref ?? "", t.voucher_no ?? "", t.description ?? "", t.notes ?? "", t.amount.toFixed(2), nameOf.user(t.created_by)]
+      [t.txn_date, t.kind, nameOf.party(t.party_id), nameOf.category(t.category_id), nameOf.method(t.payment_method_id), t.job_ref ?? "", t.voucher_no ?? "", t.description ?? "", t.notes ?? "", t.amount.toFixed(2), nameOf.user(t.created_by)]
         .map((cell) => '"' + String(cell).replace(/"/g, '""') + '"')
         .join(",")
     );
@@ -478,7 +479,7 @@ function ViewModal({
   onClose: () => void;
   onSave: (id: string, patch: Partial<TransactionInput>) => void;
   canWrite: boolean;
-  nameOf: { category: (id: string | null | undefined) => string; method: (id: string | null | undefined) => string; vehicle: (id: string | null | undefined) => string; user: (id: string) => string };
+  nameOf: { category: (id: string | null | undefined) => string; method: (id: string | null | undefined) => string; vehicle: (id: string | null | undefined) => string; user: (id: string) => string; party: (id: string | null | undefined) => string };
 }) {
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState("");
@@ -499,6 +500,7 @@ function ViewModal({
   if (!tx) return null;
 
   const meta: [string, React.ReactNode, string][] = [
+    [tx.kind === "income" ? "Client" : "Supplier", nameOf.party(tx.party_id), "party"],
     ["Category", nameOf.category(tx.category_id), "cat"],
     ["Payment method", nameOf.method(tx.payment_method_id), "pm"],
     ["Vehicle", nameOf.vehicle(tx.vehicle_id), "veh"],

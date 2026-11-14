@@ -1,6 +1,7 @@
 "use client";
 import React, { useEffect, useRef, useState } from "react";
 import { useDb, useDbContext } from "@/lib/local-db";
+import { normalizeDb } from "@/lib/store";
 import { getSupabase } from "@/lib/supabase";
 import { freshDb } from "@/lib/seed";
 import { upsertCategory, upsertPaymentMethod, addTransaction, archiveRef } from "@/lib/repo";
@@ -600,6 +601,8 @@ interface UserRowX {
 const TAB_DEFS: { key: string; label: string }[] = [
   { key: "dashboard", label: "Dashboard" },
   { key: "transactions", label: "Transactions" },
+  { key: "suppliers", label: "Suppliers" },
+  { key: "clients", label: "Clients" },
   { key: "fleet", label: "Fleet" },
   { key: "dues", label: "Dues" },
 ];
@@ -1217,7 +1220,7 @@ function DataSection({ db, setDb, signedIn, onToast }: { db: Database; setDb: Re
       try {
         const parsed = JSON.parse(String(reader.result)) as Database;
         if (!parsed.transactions || !Array.isArray(parsed.transactions)) throw new Error("bad file");
-        setDb(parsed);
+        setDb(normalizeDb(parsed));
         appendNotif("sync", "Backup restored (" + parsed.transactions.length + " transactions)", "data tools");
         onToast("Backup restored (" + parsed.transactions.length + " transactions)");
       } catch {

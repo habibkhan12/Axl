@@ -3,10 +3,10 @@ import React, { createContext, useContext, useEffect, useMemo, useState } from "
 import type { Session } from "@supabase/supabase-js";
 import type { Database, Role, TabAccess, TabAccessMap, TabKey } from "./types";
 import { freshDb } from "./seed";
-import { STORAGE_KEY } from "./store";
-import { getSupabase } from "./supabase";
+import { STORAGE_KEY, normalizeDb } from "./store";
+import { getSupabase, SUPABASE_READY } from "./supabase";
 import { ADMIN_EMAIL } from "./admin";
-import { loadCloudDb, updateSettings } from "./supabase-db";
+import { loadCloudDb, updateSettings, getSchemaIssues } from "./supabase-db";
 import { appendNotif } from "./notifications";
 
 interface Profile {
@@ -21,6 +21,8 @@ interface Profile {
 const TAB_PAGES: Record<Exclude<TabKey, "settings">, string> = {
   dashboard: "/",
   transactions: "/transactions",
+  suppliers: "/suppliers",
+  clients: "/clients",
   fleet: "/fleet",
   dues: "/dues",
 };
@@ -65,6 +67,8 @@ interface DbContextValue {
   setDb: React.Dispatch<React.SetStateAction<Database | null>>;
   saveState: SaveState;
   retrySave: () => void;
+  /** Objects the deployed database is missing (e.g. the parties table). */
+  schemaIssues: string[];
   session: Session | null;
   profile: Profile | null;
   role: Role;
@@ -85,6 +89,7 @@ const DbContext = createContext<DbContextValue>({
   setDb: () => {},
   saveState: { saving: false, error: null, savedAt: null },
   retrySave: () => {},
+  schemaIssues: [],
   session: null,
   profile: null,
   role: "viewer",
@@ -105,7 +110,8 @@ function readLocalDb(): Database | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Database;
     if (!parsed || !Array.isArray(parsed.transactions)) return null;
-    return parsed;
+    // Databases written before suppliers/clients existed have no `parties`.
+    return normalizeDb(parsed);
   } catch {
     return null;
   }
@@ -118,6 +124,7 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>({ saving: false, error: null, savedAt: null });
+  const [schemaIssues, setSchemaIssues] = useState<string[]>([]);
 
   // Auth session listener — hard-capped so the app can never hang on startup.
   useEffect(() => {
@@ -165,6 +172,7 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
           }
         }
         if (cloud && !cancelled) {
+          setSchemaIssues(getSchemaIssues());
           setDb(cloud);
         } else if (!cancelled) {
           console.error("Cloud load failed after retries:", lastErr);
@@ -270,6 +278,7 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
   async function refresh() {
     if (!session) return;
     const cloud = await loadCloudDb();
+    setSchemaIssues(getSchemaIssues());
     setDb(cloud);
   }
 
@@ -430,6 +439,7 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
         // --- reference tables: upserts and deletes by id ---
         const refTables = [
           ["categories", before.categories, db.categories],
+          ["parties", before.parties, db.parties],
           ["vehicles", before.vehicles, db.vehicles],
           ["payment_methods", before.payment_methods, db.payment_methods],
         ] as const;
@@ -485,7 +495,17 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session]);
 
-  const role: Role = profile?.role ?? "viewer";
+  // Local mode has no signed-in profile; act as the seeded user picked in the
+  // sidebar so the app isn't stuck read-only when Supabase isn't configured.
+  const localProfile: Profile | null =
+    !SUPABASE_READY && db
+      ? (() => {
+          const u = db.users.find((x) => x.id === db.settings.active_user_id) ?? db.users[0];
+          return u ? { id: u.id, name: u.name, role: u.role } : null;
+        })()
+      : null;
+  const effectiveProfile = profile ?? localProfile;
+  const role: Role = effectiveProfile?.role ?? "viewer";
   const value = useMemo<DbContextValue>(
     () => ({
       db,
@@ -494,20 +514,21 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
       setDb,
       saveState,
       retrySave,
+      schemaIssues,
       session,
-      profile,
+      profile: effectiveProfile,
       role,
       canWrite: role === "owner" || role === "editor",
-      tabAccess: (tab: Exclude<TabKey, "settings">) => tabAccessOf(profile, role, tab),
-      canView: (pathname: string) => canViewPage(pathname, profile, role),
-      canEdit: (pathname: string) => canEditPage(pathname, profile, role),
+      tabAccess: (tab: Exclude<TabKey, "settings">) => tabAccessOf(effectiveProfile, role, tab),
+      canView: (pathname: string) => canViewPage(pathname, effectiveProfile, role),
+      canEdit: (pathname: string) => canEditPage(pathname, effectiveProfile, role),
       signIn,
       signUp,
       signOut,
       refresh,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [db, hydrated, authChecked, session, profile, role, saveState]
+    [db, hydrated, authChecked, session, profile, role, saveState, schemaIssues]
   );
 
   return <DbContext.Provider value={value}>{children}</DbContext.Provider>;

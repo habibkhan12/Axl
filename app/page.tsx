@@ -53,7 +53,7 @@ import {
   Segmented,
   SortGlyph,
 } from "@/components/ui";
-import { Sparkline, TrendBars, type TrendMetric } from "@/components/charts";
+import { Sparkline, TrendChart, type TrendMetric } from "@/components/charts";
 import { PageHeader } from "@/components/app-shell";
 import { DatePicker } from "@/components/date-picker";
 import type { Transaction } from "@/lib/types";
@@ -413,13 +413,7 @@ export default function DashboardPage() {
               <span className="text-[11px] text-zinc-400">avg {fmtAED(series.length ? trendTotal / series.length : 0)}/day</span>
             </div>
             <div className="mt-4 h-64 min-w-0 overflow-hidden">
-              <TrendBars
-                data={series}
-                metric={metric}
-                periodDays={periodDays}
-                showProjection={showProj}
-                target={metric === "income" ? db.settings.monthly_income_target : metric === "expense" ? db.settings.monthly_expense_target ?? 0 : db.settings.monthly_profit_target ?? 0}
-              />
+              <TrendChart data={series} metric={metric} periodDays={periodDays} showProjection={showProj} />
             </div>
           </Card>
 

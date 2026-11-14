@@ -1,34 +1,46 @@
 "use client";
-import React, { useEffect, useMemo, useState } from "react";
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, Bar, ReferenceLine, ComposedChart, Line } from "recharts";
+import React, { useMemo } from "react";
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
+  CartesianGrid,
+  LineChart,
+  Line,
+} from "recharts";
 import { fmtAED, fmtNum, fmtWeekday, todayISO } from "@/lib/format";
 import type { DayPoint } from "@/lib/analytics";
 
-/* ───────────────────────── TrendBars — Kravio bar chart ──────────────────── */
-/* Light-gray rounded bars; the hovered / current day turns near-black, a      */
-/* dashed reference line marks the period average, y-axis sits on the right.   */
+/* ──────────────────────────── Cash-flow trend ───────────────────────────── */
+/* One plain line: the running total for the period, drawn from zero upward.  */
+/* No bars, no second axis, no average/target clutter — just the balance curve */
+/* with an optional dashed projection to the end of the selected range.        */
 
 export type TrendMetric = "profit" | "income" | "expense";
 
-export function TrendBars({
+export function TrendChart({
   data,
   metric,
-  target,
   periodDays,
   showProjection,
 }: {
   data: DayPoint[];
   metric: TrendMetric;
-  target?: number;
-  /** Full length of the selected range, so the target-pace line is computed against the whole period even when the chart is clipped at today. */
+  /** Full length of the selected range, so the projection can run to its end. */
   periodDays?: number;
-  /** When on and the range runs past today: pace + projection dashed lines extend to the end of the range while actual bars/line stay at today. */
+  /** Extend the running total to the end of the range at today's average pace. */
   showProjection?: boolean;
 }) {
   const today = todayISO();
-  const [active, setActive] = useState<number | null>(null);
 
-  const rows = useMemo(
+  const daily = useMemo(
     () =>
       data.map((d) => ({
         date: d.date,
@@ -37,138 +49,122 @@ export function TrendBars({
     [data, metric]
   );
 
-  // Target overlay (metric vs its period target): cumulative actual to today.
-  // With the projection toggle on and the range running past today, the
-  // target-pace line and an at-current-pace projection extend to the range end;
-  // bars and the actual line never plot into the future.
-  const showTarget = !!target && target > 0 && rows.length > 1;
-  const todayIdx = rows.findIndex((r) => r.date === today);
-  const runs: number[] = [];
-  let run = 0;
-  for (const r of rows) {
-    run += r.value;
-    runs.push(run);
-  }
-  const cumAtToday = todayIdx >= 0 ? runs[todayIdx] : runs[runs.length - 1];
-  const avgPerDay = todayIdx > 0 ? cumAtToday / (todayIdx + 1) : cumAtToday;
-  const pacePerDay = showTarget ? target! / (periodDays ?? rows.length) : 0;
-  const projFuture = !!(showProjection && showTarget && todayIdx >= 0 && periodDays && periodDays > rows.length);
+  const chart = useMemo(() => {
+    if (daily.length === 0) return [] as { date: string; total: number | null; proj: number | null }[];
 
-  // Future rows (day after today .. end of range): no bar, no actual line —
-  // only the dashed pace / projection lines continue.
-  const future: { date: string; value: number | null }[] = projFuture
-    ? Array.from({ length: (periodDays ?? rows.length) - rows.length }, (_, k) => {
-        const d = new Date(rows[rows.length - 1].date + "T00:00:00");
-        d.setDate(d.getDate() + 1 + k);
+    // Running total from the first day of the range — always starts at 0.
+    let running = 0;
+    const rows: { date: string; total: number | null; proj: number | null }[] = daily.map((d) => {
+      running += d.value;
+      return { date: d.date, total: running, proj: null };
+    });
+
+    const todayIdx = daily.findIndex((d) => d.date === today);
+    const elapsed = todayIdx >= 0 ? todayIdx + 1 : daily.length;
+
+    if (showProjection && periodDays && periodDays > daily.length && elapsed > 0) {
+      const avgPerDay = (rows[elapsed - 1].total ?? 0) / elapsed;
+      const last = rows[rows.length - 1];
+      const lastTotal = last.total ?? 0;
+      // Join the dashed line to the real one at the last recorded day.
+      last.proj = lastTotal;
+      const anchor = new Date(last.date + "T00:00:00");
+      for (let k = 1; k <= periodDays - daily.length; k++) {
+        const d = new Date(anchor);
+        d.setDate(d.getDate() + k);
         const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-        return { date: iso, value: null };
-      })
-    : [];
+        rows.push({ date: iso, total: null, proj: Math.round(lastTotal + avgPerDay * k) });
+      }
+    }
 
-  const enriched = [...rows, ...future].map((r, i) => ({
-    date: r.date,
-    value: r.value,
-    cum: i < rows.length ? runs[i] : null,
-    pace: showTarget ? Math.round(pacePerDay * (i + 1)) : null,
-    proj: projFuture && i >= todayIdx ? Math.round(cumAtToday + avgPerDay * (i - todayIdx)) : null,
-  }));
-  const projEndVal = projFuture ? cumAtToday + avgPerDay * ((periodDays ?? rows.length) - 1 - todayIdx) : null;
-  const cumMax = Math.max(...runs, showTarget ? pacePerDay * (periodDays ?? rows.length) : 0, projEndVal ?? 0);
+    return rows;
+  }, [daily, periodDays, showProjection, today]);
 
-  // Default highlight: today when visible, otherwise the latest day.
-  useEffect(() => {
-    const i = rows.findIndex((r) => r.date === today);
-    setActive(i >= 0 ? i : rows.length - 1);
-  }, [rows, today]);
+  if (chart.length === 0) return null;
 
-  if (rows.length === 0) return null;
-
-  const maxV = Math.max(...rows.map((r) => r.value), 0);
-  const minV = Math.min(...rows.map((r) => r.value), 0);
-  const avg = rows.reduce((s, r) => s + r.value, 0) / rows.length;
-  const few = rows.length <= 10;
-  const interval = rows.length > 16 ? 4 : rows.length > 10 ? 2 : 0;
+  const values = chart.map((r) => r.total ?? r.proj ?? 0);
+  const maxV = Math.max(...values, 0);
+  const minV = Math.min(...values, 0);
+  const showProjectionLine = chart.some((r) => r.proj != null);
+  const dayCount = daily.length;
+  const few = dayCount <= 10;
+  const interval = dayCount > 16 ? 4 : dayCount > 10 ? 2 : 0;
 
   return (
     <div className="h-full">
-    <ResponsiveContainer width="100%" height="88%">
-      <ComposedChart
-        data={enriched}
-        margin={{ top: 16, right: 4, bottom: 0, left: 4 }}
-        onMouseMove={(s: unknown) => {
-          const st = s as { activeTooltipIndex?: number };
-          if (typeof st?.activeTooltipIndex === "number" && st.activeTooltipIndex >= 0) setActive(st.activeTooltipIndex);
-        }}
-      >
-        <Tooltip cursor={{ fill: "rgba(24,24,27,0.045)" }} content={<TrendTip showCum={showTarget} />} />
-        {!showTarget ? <ReferenceLine y={avg} stroke="#b1b1b7" strokeDasharray="5 5" /> : null}
-        <XAxis
-          dataKey="date"
-          tickFormatter={(d: string) => (few ? fmtWeekday(d) : d.slice(8, 10))}
-          tick={{ fontSize: 11, fill: "#a1a1aa" }}
-          axisLine={false}
-          tickLine={false}
-          interval={interval}
-        />
-        <YAxis
-          yAxisId="daily"
-          orientation="right"
-          width={72}
-          domain={[minV < 0 ? Math.floor(minV * 1.15) : 0, Math.ceil(maxV * 1.15) || 1]}
-          tick={{ fontSize: 11, fill: "#a1a1aa" }}
-          axisLine={false}
-          tickLine={false}
-          tickFormatter={(v: number) => fmtNum(v)}
-        />
-        {showTarget ? <YAxis yAxisId="cum" hide domain={[0, Math.ceil(cumMax * 1.08) || 1]} /> : null}
-        <Bar yAxisId="daily" dataKey="value" radius={[5, 5, 2, 2]} maxBarSize={40}>
-          {rows.map((r, i) => (
-            <Cell key={i} fill={i === active ? "#1c1c21" : r.value === 0 ? "#f1f1ef" : "#e5e5e9"} />
-          ))}
-        </Bar>
-        {showTarget ? (
-          <>
-            <Line yAxisId="cum" type="monotone" dataKey="cum" stroke="#18181b" strokeWidth={2} dot={false} isAnimationActive={false} connectNulls={false} />
-            <Line yAxisId="cum" type="linear" dataKey="pace" stroke="#a1a1aa" strokeWidth={1.5} strokeDasharray="6 6" dot={false} isAnimationActive={false} />
-            {projFuture ? (
-              <Line yAxisId="cum" type="linear" dataKey="proj" stroke="#f59e0b" strokeWidth={2} strokeDasharray="4 4" dot={false} isAnimationActive={false} />
-            ) : null}
-          </>
-        ) : null}
-      </ComposedChart>
-    </ResponsiveContainer>
-    {showTarget ? (
+      <ResponsiveContainer width="100%" height="88%">
+        <LineChart data={chart} margin={{ top: 12, right: 4, bottom: 0, left: 4 }}>
+          <CartesianGrid stroke="#f2f2f0" vertical={false} />
+          <XAxis
+            dataKey="date"
+            tickFormatter={(d: string) => (few ? fmtWeekday(d) : d.slice(8, 10))}
+            tick={{ fontSize: 11, fill: "#a1a1aa" }}
+            axisLine={false}
+            tickLine={false}
+            interval={interval}
+          />
+          <YAxis
+            orientation="right"
+            width={78}
+            // Zero is always the floor: the curve reads upward like a balance.
+            domain={[minV < 0 ? Math.floor(minV * 1.1) : 0, Math.ceil(maxV * 1.1) || 1]}
+            tick={{ fontSize: 11, fill: "#a1a1aa" }}
+            axisLine={false}
+            tickLine={false}
+            tickFormatter={(v: number) => fmtNum(v)}
+          />
+          <Tooltip
+            cursor={{ stroke: "#d4d4d0", strokeDasharray: "3 3" }}
+            content={<TrendTip />}
+          />
+          <Line
+            type="monotone"
+            dataKey="total"
+            stroke="#18181b"
+            strokeWidth={2.2}
+            dot={false}
+            activeDot={{ r: 4, strokeWidth: 0, fill: "#18181b" }}
+            isAnimationActive={false}
+            connectNulls={false}
+          />
+          {showProjectionLine ? (
+            <Line
+              type="linear"
+              dataKey="proj"
+              stroke="#f59e0b"
+              strokeWidth={2}
+              strokeDasharray="5 5"
+              dot={false}
+              isAnimationActive={false}
+              connectNulls={false}
+            />
+          ) : null}
+        </LineChart>
+      </ResponsiveContainer>
       <div className="mt-1 flex h-[12%] flex-wrap items-center gap-x-4 gap-y-0.5 text-[10px] font-medium text-zinc-400">
-        <span className="flex items-center gap-1.5"><span className="h-0.5 w-4 rounded bg-zinc-900" /> Actual to date</span>
-        <span className="flex items-center gap-1.5"><span className="h-0 w-4 border-t border-dashed border-zinc-400" /> Target pace</span>
-        {projFuture ? (
-          <span className="flex items-center gap-1.5"><span className="h-0 w-4 border-t border-dashed border-amber-500" /> Projection at current pace</span>
+        <span className="flex items-center gap-1.5">
+          <span className="h-0.5 w-4 rounded bg-zinc-900" /> Running total
+        </span>
+        {showProjectionLine ? (
+          <span className="flex items-center gap-1.5">
+            <span className="h-0 w-4 border-t border-dashed border-amber-500" /> Projection to period end
+          </span>
         ) : null}
       </div>
-    ) : null}
     </div>
   );
 }
 
-function TrendTip(props: { active?: boolean; showCum?: boolean; payload?: { payload?: { date: string; value: number | null; cum?: number | null; pace?: number | null; proj?: number | null } }[] }) {
+function TrendTip(props: { active?: boolean; payload?: { payload?: { date: string; total: number | null; proj: number | null } }[] }) {
   if (!props.active || !props.payload?.length) return null;
   const p = props.payload[0]?.payload;
   if (!p) return null;
-  const head =
-    p.value != null
-      ? fmtWeekday(p.date) + " · " + fmtAED(p.value)
-      : p.proj != null
-        ? fmtWeekday(p.date) + " · projected pace"
-        : fmtWeekday(p.date);
+  const amount = p.total ?? p.proj;
+  if (amount == null) return null;
   return (
     <div className="rounded-lg bg-zinc-900 px-2.5 py-1.5 text-[11px] font-semibold text-white shadow-[0_4px_14px_rgba(24,24,27,0.3)]">
-      {head}
-      {props.showCum && (p.cum != null || p.pace != null || p.proj != null) ? (
-        <div className="font-normal text-zinc-300">
-          {p.cum != null ? "to date " + fmtAED(p.cum) : p.proj != null ? "projected " + fmtAED(p.proj) : "projected " + fmtAED(p.pace ?? 0)}
-          {p.pace != null ? " · target " + fmtAED(p.pace) : ""}
-        </div>
-      ) : null}
+      {fmtWeekday(p.date)} · {fmtAED(amount)}
+      {p.total == null ? <span className="ml-1 font-normal text-zinc-400">projected</span> : null}
     </div>
   );
 }
