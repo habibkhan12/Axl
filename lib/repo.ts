@@ -1,4 +1,4 @@
-import type { Database, Transaction, Category, Vehicle, PaymentMethod, User, Party, PartyKind } from "./types";
+import type { Database, Transaction, Category, Vehicle, PaymentMethod, User, Party, PartyKind, StaffMember, StaffDocument } from "./types";
 import type { TransactionInput } from "./store";
 
 export function uid(prefix: string): string {
@@ -54,6 +54,23 @@ export function upsertCategory(db: Database, cat: Category): Database {
 export function upsertVehicle(db: Database, v: Vehicle): Database {
   const exists = db.vehicles.some((x) => x.id === v.id);
   return { ...db, vehicles: exists ? db.vehicles.map((x) => (x.id === v.id ? v : x)) : [...db.vehicles, v] };
+}
+
+export function upsertStaff(db: Database, member: StaffMember): Database {
+  const exists = db.staff.some((s) => s.id === member.id);
+  return { ...db, staff: exists ? db.staff.map((s) => (s.id === member.id ? member : s)) : [...db.staff, member] };
+}
+
+export function upsertStaffDocument(db: Database, doc: StaffDocument): Database {
+  const exists = db.staff_documents.some((d) => d.id === doc.id);
+  return {
+    ...db,
+    staff_documents: exists ? db.staff_documents.map((d) => (d.id === doc.id ? doc : d)) : [...db.staff_documents, doc],
+  };
+}
+
+export function deleteStaffDocument(db: Database, id: string): Database {
+  return { ...db, staff_documents: db.staff_documents.filter((d) => d.id !== id) };
 }
 
 export function upsertParty(db: Database, party: Party): Database {

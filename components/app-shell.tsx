@@ -2,7 +2,7 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ArrowLeftRight, Bell, CarFront, Grid2X2, Landmark, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Plus, Search, Settings2, Truck, Users, X } from "lucide-react";
+import { ArrowLeftRight, Bell, CarFront, Grid2X2, Landmark, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Plus, Search, Settings2, Truck, UserRound, Users, X } from "lucide-react";
 import type { Kind } from "@/lib/types";
 import { DbProvider, useDbContext, canViewPage } from "@/lib/local-db";
 import { activeUser } from "@/lib/repo";
@@ -106,6 +106,7 @@ const NAV = [
   { href: "/suppliers", label: "Suppliers", icon: Truck, section: "main" },
   { href: "/clients", label: "Clients", icon: Users, section: "main" },
   { href: "/fleet", label: "Fleet", icon: CarFront, section: "main" },
+  { href: "/personnel", label: "Personnel", icon: UserRound, section: "main" },
   { href: "/dues", label: "Dues & fines", icon: Landmark, section: "main" },
   { href: "/settings", label: "Settings", icon: Settings2, section: "manage" },
 ] as const;
@@ -116,6 +117,7 @@ const PAGE_LABELS: Record<string, string> = {
   "/suppliers": "Suppliers",
   "/clients": "Clients",
   "/fleet": "Fleet",
+  "/personnel": "Personnel",
   "/dues": "Dues & fines",
   "/settings": "Settings",
 };

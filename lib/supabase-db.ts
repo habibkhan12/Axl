@@ -13,16 +13,19 @@ export function getSchemaIssues(): string[] {
 }
 
 export const PARTIES_SQL = "supabase/migrations/2026-11-14-suppliers-clients.sql";
+export const PERSONNEL_SQL = "supabase/migrations/2026-11-14-personnel-documents.sql";
 
 export async function loadCloudDb(): Promise<Database> {
   schemaIssues = [];
   const sb = getSupabase();
-  const [tx, cats, vehs, pms, partiesRes, profiles, settings] = await Promise.all([
+  const [tx, cats, vehs, pms, partiesRes, staffRes, staffDocsRes, profiles, settings] = await Promise.all([
     sb.from("transactions").select("*").order("txn_date", { ascending: false }),
     sb.from("categories").select("*"),
     sb.from("vehicles").select("*"),
     sb.from("payment_methods").select("*"),
     sb.from("parties").select("*"),
+    sb.from("staff").select("*"),
+    sb.from("staff_documents").select("*"),
     sb.from("profiles").select("*"),
     sb.from("app_settings").select("*").eq("id", 1).maybeSingle(),
   ]);
@@ -45,15 +48,26 @@ export async function loadCloudDb(): Promise<Database> {
   // the whole app down if a database has not run it yet, but say so in the UI.
   if (partiesRes.error) {
     console.warn("parties table unavailable:", partiesRes.error.message);
-    schemaIssues = [
+    schemaIssues.push(
       "Suppliers & Clients need a one-time database update: the public.parties table is missing. " +
-        "Run " + PARTIES_SQL + " in the Supabase SQL editor, then reload.",
-    ];
+        "Run " + PARTIES_SQL + " in the Supabase SQL editor, then reload."
+    );
+  }
+
+  // Personnel tables / storage bucket arrive with their own migration.
+  if (staffRes.error || staffDocsRes.error) {
+    console.warn("personnel tables unavailable:", staffRes.error?.message ?? staffDocsRes.error?.message);
+    schemaIssues.push(
+      "Personnel needs a one-time database update: the public.staff / public.staff_documents tables and the " +
+        "staff-documents storage bucket are missing. Run " + PERSONNEL_SQL + " in the Supabase SQL editor, then reload."
+    );
   }
 
   return {
     transactions: (tx.data ?? []) as unknown as Database["transactions"],
     parties: (partiesRes.error ? [] : partiesRes.data ?? []) as unknown as Database["parties"],
+    staff: (staffRes.error ? [] : staffRes.data ?? []) as unknown as Database["staff"],
+    staff_documents: (staffDocsRes.error ? [] : staffDocsRes.data ?? []) as unknown as Database["staff_documents"],
     categories: (cats.data ?? []) as unknown as Database["categories"],
     vehicles: (vehs.data ?? []) as unknown as Database["vehicles"],
     payment_methods: (pms.data ?? []) as unknown as Database["payment_methods"],
