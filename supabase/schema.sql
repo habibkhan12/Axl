@@ -84,6 +84,21 @@ create table if not exists public.parties (
 
 create index if not exists parties_kind_name_idx on public.parties (kind, name);
 
+-- Quotations (projects) and the link from an entry back to its quote.
+create table if not exists public.quotes (
+  id text primary key,
+  quote_no text not null,
+  client_id text,
+  amount numeric not null check (amount >= 0),
+  status text not null default 'review' check (status in ('review','approved','completed','rejected')),
+  quote_date date,
+  notes text,
+  created_at timestamptz not null default now()
+);
+
+create unique index if not exists quotes_no_key on public.quotes (lower(quote_no));
+create index if not exists quotes_status_idx on public.quotes (status);
+
 -- Personnel records and the documents attached to them.
 create table if not exists public.staff (
   id text primary key,
@@ -238,6 +253,7 @@ alter table public.app_settings enable row level security;
 alter table public.categories enable row level security;
 alter table public.vehicles enable row level security;
 alter table public.payment_methods enable row level security;
+alter table public.quotes enable row level security;
 alter table public.staff enable row level security;
 alter table public.staff_documents enable row level security;
 alter table public.staff_overtime enable row level security;
@@ -297,6 +313,13 @@ drop policy if exists party_read on public.parties;
 create policy party_read on public.parties for select to authenticated using (true);
 drop policy if exists party_write on public.parties;
 create policy party_write on public.parties for all to authenticated
+  using (public.my_role() in ('owner','editor')) with check (public.my_role() in ('owner','editor'));
+
+-- Quotations: everyone reads; owner/editor write
+drop policy if exists quotes_read on public.quotes;
+create policy quotes_read on public.quotes for select to authenticated using (true);
+drop policy if exists quotes_write on public.quotes;
+create policy quotes_write on public.quotes for all to authenticated
   using (public.my_role() in ('owner','editor')) with check (public.my_role() in ('owner','editor'));
 
 -- Personnel: everyone reads; owner/editor write
