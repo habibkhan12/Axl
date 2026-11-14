@@ -147,7 +147,7 @@ export function PersonnelPage() {
   return (
     <div>
       <PageHeader
-        title="Personnel"
+        title="Employees"
         subtitle="Team records and their documents — passports, visas, licences — with expiry tracking."
         actions={
           editable ? (
@@ -204,7 +204,7 @@ export function PersonnelPage() {
 
         {rows.length === 0 ? (
           <div className="p-6">
-            <EmptyState icon={<UserRound size={18} />} title="No personnel yet" hint={editable ? "Add a person, then attach their documents." : "Ask an admin to add personnel."} />
+            <EmptyState icon={<UserRound size={18} />} title="No employees yet" hint={editable ? "Add an employee, then attach their documents." : "Ask an admin to add employees."} />
             {editable ? (
               <div className="mt-3 flex justify-center">
                 <Button variant="primary" onClick={() => setAdding(true)}>
