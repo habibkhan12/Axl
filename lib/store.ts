@@ -21,5 +21,10 @@ export const STORAGE_KEY = "axl-books-db-v1";
 
 /** Fill in collections added after a database was written (old local data, backups). */
 export function normalizeDb(db: Database): Database {
-  return { ...db, parties: Array.isArray(db.parties) ? db.parties : [] };
+  return {
+    ...db,
+    parties: Array.isArray(db.parties) ? db.parties : [],
+    staff: Array.isArray(db.staff) ? db.staff : [],
+    staff_documents: Array.isArray(db.staff_documents) ? db.staff_documents : [],
+  };
 }

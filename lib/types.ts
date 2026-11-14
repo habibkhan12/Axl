@@ -5,7 +5,7 @@ export type Role = "owner" | "editor" | "viewer";
 
 /** Per-tab access level. "none" = tab hidden entirely. */
 export type TabAccess = "none" | "view" | "edit";
-export type TabKey = "dashboard" | "transactions" | "suppliers" | "clients" | "fleet" | "dues" | "settings";
+export type TabKey = "dashboard" | "transactions" | "suppliers" | "clients" | "fleet" | "personnel" | "dues" | "settings";
 
 /** What tabs a non-admin account can see/edit. Admin always sees everything. */
 export interface TabAccessMap {
@@ -14,6 +14,7 @@ export interface TabAccessMap {
   suppliers?: TabAccess;
   clients?: TabAccess;
   fleet?: TabAccess;
+  personnel?: TabAccess;
   dues?: TabAccess;
 }
 export interface Vehicle {
@@ -96,9 +97,37 @@ export interface Settings {
   active_user_id: string; // localStorage stand-in for auth.session
 }
 
+/** A staff member tracked on the Personnel tab. */
+export interface StaffMember {
+  id: string;
+  name: string;
+  phone?: string | null;
+  notes?: string | null;
+  archived?: boolean;
+  created_at?: string;
+}
+
+/** A document (passport, visa, licence…) attached to a staff member. */
+export interface StaffDocument {
+  id: string;
+  staff_id: string;
+  name: string;
+  expiry_date?: string | null;
+  /** Object path in the `staff-documents` Supabase Storage bucket. */
+  file_path?: string | null;
+  file_name?: string | null;
+  file_type?: string | null;
+  file_size?: number | null;
+  /** Local mode only (no Supabase): the file as a data URL. Cloud rows use file_path. */
+  file_data?: string | null;
+  created_at?: string;
+}
+
 export interface Database {
   vehicles: Vehicle[];
   parties: Party[];
+  staff: StaffMember[];
+  staff_documents: StaffDocument[];
   categories: Category[];
   payment_methods: PaymentMethod[];
   transactions: Transaction[];

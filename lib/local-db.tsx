@@ -24,6 +24,7 @@ const TAB_PAGES: Record<Exclude<TabKey, "settings">, string> = {
   suppliers: "/suppliers",
   clients: "/clients",
   fleet: "/fleet",
+  personnel: "/personnel",
   dues: "/dues",
 };
 
@@ -440,6 +441,8 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
         const refTables = [
           ["categories", before.categories, db.categories],
           ["parties", before.parties, db.parties],
+          ["staff", before.staff, db.staff],
+          ["staff_documents", before.staff_documents, db.staff_documents],
           ["vehicles", before.vehicles, db.vehicles],
           ["payment_methods", before.payment_methods, db.payment_methods],
         ] as const;
