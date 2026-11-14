@@ -125,8 +125,9 @@ create table if not exists public.staff_documents (
 create index if not exists staff_documents_staff_idx on public.staff_documents (staff_id);
 create index if not exists staff_documents_expiry_idx on public.staff_documents (expiry_date);
 
--- Salary, overtime, leave and money movements per employee.
+-- Salary, overtime, leave, fines and money movements per employee.
 alter table public.staff add column if not exists salary numeric;
+alter table public.staff add column if not exists overtime_rate numeric;
 
 create table if not exists public.staff_overtime (
   id text primary key,
@@ -149,6 +150,17 @@ create table if not exists public.staff_leaves (
 );
 
 create index if not exists staff_leaves_staff_from_idx on public.staff_leaves (staff_id, from_date);
+
+create table if not exists public.staff_fines (
+  id text primary key,
+  staff_id text not null references public.staff(id) on delete cascade,
+  reason text not null,
+  amount numeric not null check (amount > 0),
+  fine_date date not null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists staff_fines_staff_date_idx on public.staff_fines (staff_id, fine_date);
 
 create table if not exists public.staff_transactions (
   id text primary key,
@@ -258,6 +270,7 @@ alter table public.staff enable row level security;
 alter table public.staff_documents enable row level security;
 alter table public.staff_overtime enable row level security;
 alter table public.staff_leaves enable row level security;
+alter table public.staff_fines enable row level security;
 alter table public.staff_transactions enable row level security;
 alter table public.transactions enable row level security;
 
@@ -346,6 +359,12 @@ drop policy if exists staff_leaves_read on public.staff_leaves;
 create policy staff_leaves_read on public.staff_leaves for select to authenticated using (true);
 drop policy if exists staff_leaves_write on public.staff_leaves;
 create policy staff_leaves_write on public.staff_leaves for all to authenticated
+  using (public.my_role() in ('owner','editor')) with check (public.my_role() in ('owner','editor'));
+
+drop policy if exists staff_fines_read on public.staff_fines;
+create policy staff_fines_read on public.staff_fines for select to authenticated using (true);
+drop policy if exists staff_fines_write on public.staff_fines;
+create policy staff_fines_write on public.staff_fines for all to authenticated
   using (public.my_role() in ('owner','editor')) with check (public.my_role() in ('owner','editor'));
 
 drop policy if exists staff_txn_read on public.staff_transactions;

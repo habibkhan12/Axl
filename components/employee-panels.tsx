@@ -1,25 +1,36 @@
 "use client";
 import React, { useMemo, useState } from "react";
-import { Clock, Palmtree, Plus, Trash2, Wallet } from "lucide-react";
+import { Clock, Palmtree, Plus, Receipt, Trash2, Wallet } from "lucide-react";
 import { Button, Card, Input, Label, MicroLabel } from "@/components/ui";
 import { DatePicker } from "@/components/date-picker";
 import { useDb } from "@/lib/local-db";
 import { removeById, uid, upsertById, upsertStaff } from "@/lib/repo";
 import { fmtAED, fmtDate, monthLabel, monthOf, todayISO } from "@/lib/format";
-import type { StaffLeave, StaffMember, StaffOvertime, StaffTransaction } from "@/lib/types";
+import type { StaffFine, StaffLeave, StaffMember, StaffOvertime, StaffTransaction } from "@/lib/types";
 
 /* ─────────────────────────────── overview ───────────────────────────────── */
 
 export function EmployeeOverview({ person, editable }: { person: StaffMember; editable: boolean }) {
   const { db, setDb } = useDb();
-  const month = monthOf(todayISO());
+  const [month, setMonth] = useState(monthOf(todayISO()));
   const year = todayISO().slice(0, 4);
 
-  const overtimeHours = db.staff_overtime.filter((o) => o.staff_id === person.id && monthOf(o.work_date) === month).reduce((s, o) => s + o.hours, 0);
   const leaveDays = leaveDaysInYear(db.staff_leaves.filter((l) => l.staff_id === person.id), year);
   const payments = db.staff_transactions.filter((t) => t.staff_id === person.id);
   const paid = payments.filter((p) => p.kind === "paid").reduce((s, p) => s + p.amount, 0);
   const received = payments.filter((p) => p.kind === "received").reduce((s, p) => s + p.amount, 0);
+
+  // ── payroll for the selected month ────────────────────────────────────────
+  const baseSalary = person.salary ?? 0;
+  const rate = person.overtime_rate ?? 0;
+  const overtimeHours = db.staff_overtime.filter((o) => o.staff_id === person.id && monthOf(o.work_date) === month).reduce((s, o) => s + o.hours, 0);
+  const overtimePay = Math.round(overtimeHours * rate * 100) / 100;
+  const fines = db.staff_fines.filter((f) => f.staff_id === person.id && monthOf(f.fine_date) === month);
+  const finesTotal = Math.round(fines.reduce((s, f) => s + f.amount, 0) * 100) / 100;
+  const paidMonth = payments.filter((p) => p.kind === "paid" && monthOf(p.txn_date) === month).reduce((s, p) => s + p.amount, 0);
+  const receivedMonth = payments.filter((p) => p.kind === "received" && monthOf(p.txn_date) === month).reduce((s, p) => s + p.amount, 0);
+  const earned = baseSalary + overtimePay - finesTotal;
+  const payable = Math.round((earned - paidMonth + receivedMonth) * 100) / 100;
 
   const [salary, setSalary] = useState(person.salary != null ? String(person.salary) : "");
   const [saved, setSaved] = useState(false);
@@ -64,11 +75,91 @@ export function EmployeeOverview({ person, editable }: { person: StaffMember; ed
         <MiniStat label="Received back" value={fmtAED(received)} sub="All time" icon={<Wallet size={12} />} />
       </div>
 
-      <div className="rounded-xl border border-[#eae4d9] bg-[#faf8f4] px-3 py-2.5">
-        <MicroLabel>Balance held by employee</MicroLabel>
-        <div className={"mt-1 text-[18px] font-bold tabular-nums " + (paid - received > 0 ? "text-zinc-900" : "text-emerald-600")}>{fmtAED(paid - received)}</div>
-        <p className="mt-0.5 text-[10px] text-zinc-400">Money paid to them minus money they have returned. Overtime is tracked in hours, not money.</p>
+      <PayrollCard
+        month={month}
+        onMonth={setMonth}
+        baseSalary={baseSalary}
+        overtimeHours={overtimeHours}
+        rate={rate}
+        overtimePay={overtimePay}
+        finesCount={fines.length}
+        finesTotal={finesTotal}
+        paidMonth={paidMonth}
+        receivedMonth={receivedMonth}
+        earned={earned}
+        payable={payable}
+      />
+
+      <div className="rounded-xl border border-[#eae4d9] bg-white px-3 py-2.5">
+        <MicroLabel>Balance held by employee (all time)</MicroLabel>
+        <div className={"mt-1 text-[15px] font-semibold tabular-nums " + (paid - received > 0 ? "text-zinc-900" : "text-emerald-600")}>{fmtAED(paid - received)}</div>
+        <p className="mt-0.5 text-[10px] text-zinc-400">Everything paid to them minus everything they have returned.</p>
       </div>
+    </div>
+  );
+}
+
+/** Month-by-month payroll: salary + overtime − fines − what has already moved. */
+function PayrollCard({
+  month,
+  onMonth,
+  baseSalary,
+  overtimeHours,
+  rate,
+  overtimePay,
+  finesCount,
+  finesTotal,
+  paidMonth,
+  receivedMonth,
+  earned,
+  payable,
+}: {
+  month: string;
+  onMonth: (m: string) => void;
+  baseSalary: number;
+  overtimeHours: number;
+  rate: number;
+  overtimePay: number;
+  finesCount: number;
+  finesTotal: number;
+  paidMonth: number;
+  receivedMonth: number;
+  earned: number;
+  payable: number;
+}) {
+  return (
+    <Card className="overflow-hidden">
+      <div className="flex items-center justify-between gap-2 border-b border-[#eae4d9] bg-[#faf8f4] px-3 py-2">
+        <MicroLabel>Payroll</MicroLabel>
+        <input
+          type="month"
+          value={month}
+          onChange={(e) => onMonth(e.target.value)}
+          className="rounded-lg border border-[#e5e5e2] bg-white px-2 py-1 text-[11px] text-zinc-700 outline-none focus:border-zinc-400"
+        />
+      </div>
+      <div className="divide-y divide-[#f1f1ef]">
+        <PayrollRow label="Base salary" value={fmtAED(baseSalary)} />
+        <PayrollRow label={"Overtime — " + fmtHours(overtimeHours) + (rate > 0 ? " × " + fmtAED(rate) + "/h" : " · no rate set")} value={"+" + fmtAED(overtimePay)} tone={overtimePay > 0 ? "emerald" : "plain"} />
+        <PayrollRow label={"Fines" + (finesCount ? " (" + finesCount + ")" : "")} value={"−" + fmtAED(finesTotal)} tone={finesTotal > 0 ? "red" : "plain"} />
+        <PayrollRow label="Subtotal earned" value={fmtAED(earned)} strong />
+        <PayrollRow label="Already paid this month" value={"−" + fmtAED(paidMonth)} />
+        <PayrollRow label="Received from employee" value={"+" + fmtAED(receivedMonth)} tone={receivedMonth > 0 ? "emerald" : "plain"} />
+      </div>
+      <div className="flex items-center justify-between gap-2 border-t border-[#eae4d9] bg-[#faf8f4] px-3 py-2.5">
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Payable for {monthLabel(month)}</span>
+        <span className={"text-[17px] font-bold tabular-nums " + (payable < 0 ? "text-red-600" : "text-zinc-900")}>{fmtAED(payable)}</span>
+      </div>
+    </Card>
+  );
+}
+
+function PayrollRow({ label, value, tone = "plain", strong = false }: { label: string; value: string; tone?: "plain" | "emerald" | "red"; strong?: boolean }) {
+  const color = tone === "emerald" ? "text-emerald-600" : tone === "red" ? "text-red-600" : "text-zinc-800";
+  return (
+    <div className="flex items-center justify-between gap-3 px-3 py-1.5">
+      <span className={"min-w-0 truncate text-[11px] " + (strong ? "font-semibold text-zinc-700" : "text-zinc-500")}>{label}</span>
+      <span className={"shrink-0 text-[12px] tabular-nums " + (strong ? "font-semibold text-zinc-900" : "font-medium " + color)}>{value}</span>
     </div>
   );
 }
@@ -101,6 +192,21 @@ export function OvertimePanel({ person, editable }: { person: StaffMember; edita
   );
   const inMonth = mine.filter((o) => monthOf(o.work_date) === month);
   const total = inMonth.reduce((s, o) => s + o.hours, 0);
+
+  // Hourly rate lives on the employee record so payroll can reuse it.
+  const [rate, setRate] = useState(person.overtime_rate != null ? String(person.overtime_rate) : "");
+  const [rateSaved, setRateSaved] = useState(false);
+  const rateValue = person.overtime_rate ?? null;
+  const rateChanged = (rateValue != null ? String(rateValue) : "") !== rate;
+  const overtimePay = Math.round(total * (Number(rate) || 0) * 100) / 100;
+
+  function saveRate() {
+    const value = rate.trim() === "" ? null : Number(rate);
+    if (value !== null && (!Number.isFinite(value) || value < 0)) return;
+    setDb((prev) => (prev ? upsertStaff(prev, { ...person, overtime_rate: value }) : prev));
+    setRateSaved(true);
+    setTimeout(() => setRateSaved(false), 1600);
+  }
 
   function add() {
     const h = Number(hours);
@@ -137,6 +243,33 @@ export function OvertimePanel({ person, editable }: { person: StaffMember; edita
             <div className="text-[15px] font-semibold tabular-nums text-zinc-900">{fmtHours(total)}</div>
           </div>
         </div>
+        <div className="mt-3 flex items-end gap-2 border-t border-[#f1ece4] pt-3">
+          <div className="flex-1">
+            <Label>Hourly overtime rate (AED)</Label>
+            <Input
+              type="number"
+              min={0}
+              step="0.01"
+              inputMode="decimal"
+              value={rate}
+              disabled={!editable}
+              onChange={(e) => setRate(e.target.value)}
+              placeholder="e.g. 25"
+            />
+          </div>
+          <div className="rounded-lg border border-[#eae4d9] bg-[#faf8f4] px-3 py-2 text-right">
+            <div className="text-[9px] font-medium uppercase tracking-wide text-zinc-400">Overtime pay</div>
+            <div className="text-[15px] font-semibold tabular-nums text-emerald-600">{fmtAED(overtimePay)}</div>
+          </div>
+        </div>
+        <p className="mt-1 text-[10px] text-zinc-400">
+          {editable && rateChanged ? "Press Save to keep this rate." : rateValue != null ? fmtHours(total) + " × " + fmtAED(rateValue) + " per hour this month." : "Set a rate to turn hours into money."}
+        </p>
+        {editable ? (
+          <Button className="mt-2" variant="primary" disabled={!rateChanged} onClick={saveRate}>
+            {rateSaved ? "Saved" : "Save rate"}
+          </Button>
+        ) : null}
       </Card>
 
       {editable ? (
@@ -282,6 +415,114 @@ export function LeavePanel({ person, editable }: { person: StaffMember; editable
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/* ───────────────────────────────── fines ────────────────────────────────── */
+
+export function FinesPanel({ person, editable }: { person: StaffMember; editable: boolean }) {
+  const { db, setDb } = useDb();
+  const [reason, setReason] = useState("");
+  const [amount, setAmount] = useState("");
+  const [date, setDate] = useState(todayISO());
+  const [error, setError] = useState<string | null>(null);
+
+  const mine = useMemo(
+    () => db.staff_fines.filter((f) => f.staff_id === person.id).sort((a, b) => (a.fine_date < b.fine_date ? 1 : -1)),
+    [db.staff_fines, person.id]
+  );
+  const month = monthOf(todayISO());
+  const monthTotal = mine.filter((f) => monthOf(f.fine_date) === month).reduce((s, f) => s + f.amount, 0);
+  const allTotal = mine.reduce((s, f) => s + f.amount, 0);
+
+  function add() {
+    const value = Number(amount);
+    if (!reason.trim()) return setError("Say what the fine is for.");
+    if (!Number.isFinite(value) || value <= 0) return setError("Enter the amount to charge.");
+    if (!date) return setError("Pick the date of the fine.");
+    setError(null);
+    const row: StaffFine = {
+      id: uid("fine"),
+      staff_id: person.id,
+      reason: reason.trim(),
+      amount: Math.round(value * 100) / 100,
+      fine_date: date,
+      created_at: new Date().toISOString(),
+    };
+    setDb((prev) => (prev ? { ...prev, staff_fines: upsertById(prev.staff_fines, row) } : prev));
+    setReason("");
+    setAmount("");
+  }
+
+  function remove(id: string) {
+    if (!window.confirm("Delete this fine?")) return;
+    setDb((prev) => (prev ? { ...prev, staff_fines: removeById(prev.staff_fines, id) } : prev));
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-2">
+        <div className="rounded-xl border border-[#eae4d9] bg-white px-3 py-2">
+          <div className="text-[9px] font-medium uppercase tracking-wide text-zinc-400">This month</div>
+          <div className="mt-0.5 text-[15px] font-semibold tabular-nums text-red-600">{fmtAED(monthTotal)}</div>
+        </div>
+        <div className="rounded-xl border border-[#eae4d9] bg-white px-3 py-2">
+          <div className="text-[9px] font-medium uppercase tracking-wide text-zinc-400">All time</div>
+          <div className="mt-0.5 text-[15px] font-semibold tabular-nums text-zinc-800">{fmtAED(allTotal)}</div>
+        </div>
+      </div>
+
+      {editable ? (
+        <Card className="space-y-2 p-3">
+          <MicroLabel>Charge a fine</MicroLabel>
+          <div>
+            <Label>Reason</Label>
+            <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Late arrival, damaged tools, lost uniform…" />
+          </div>
+          <div className="flex gap-2">
+            <div className="flex-1">
+              <Label>Amount (AED)</Label>
+              <Input type="number" min={0} step="0.01" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="100" />
+            </div>
+            <div className="flex-1">
+              <Label>Date</Label>
+              <DatePicker value={date} onChange={setDate} />
+            </div>
+          </div>
+          {error ? <p className="text-[11px] text-red-600">{error}</p> : null}
+          <Button variant="primary" onClick={add}>
+            <Plus size={13} /> Add fine
+          </Button>
+        </Card>
+      ) : null}
+
+      <div>
+        <MicroLabel className="mb-1.5">Fines — {mine.length}</MicroLabel>
+        {mine.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-[#e5e5e2] px-3 py-4 text-center text-[12px] text-zinc-400">No fines charged to this employee.</div>
+        ) : (
+          <div className="divide-y divide-[#f1f1ef] rounded-xl border border-[#eae4d9]">
+            {mine.map((f) => (
+              <div key={f.id} className="flex items-center gap-2 px-3 py-2">
+                <span className="w-16 shrink-0 text-[11px] text-zinc-500">{fmtDate(f.fine_date)}</span>
+                <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                  <Receipt size={11} className="shrink-0 text-zinc-300" />
+                  <span className="min-w-0 truncate text-[12px] text-zinc-700">{f.reason}</span>
+                </span>
+                <span className="shrink-0 text-[12px] font-semibold tabular-nums text-red-600">−{fmtAED(f.amount)}</span>
+                {editable ? (
+                  <button onClick={() => remove(f.id)} className="shrink-0 rounded-md p-1 text-zinc-300 hover:bg-red-50 hover:text-red-600" aria-label="Delete fine">
+                    <Trash2 size={12} />
+                  </button>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <p className="text-[10px] leading-relaxed text-zinc-300">Fines dated in a month are deducted from that month&apos;s salary on the Overview payroll.</p>
     </div>
   );
 }

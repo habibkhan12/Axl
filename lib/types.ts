@@ -124,6 +124,8 @@ export interface StaffMember {
   notes?: string | null;
   /** Monthly salary. Optional — some staff are paid per job. */
   salary?: number | null;
+  /** Pay per overtime hour, used to turn logged hours into money. */
+  overtime_rate?: number | null;
   archived?: boolean;
   created_at?: string;
 }
@@ -135,6 +137,17 @@ export interface StaffOvertime {
   work_date: string;
   hours: number;
   note?: string | null;
+  created_at?: string;
+}
+
+/** A fine deducted from an employee's pay. */
+export interface StaffFine {
+  id: string;
+  staff_id: string;
+  /** Why the employee is being charged. */
+  reason: string;
+  amount: number;
+  fine_date: string;
   created_at?: string;
 }
 
@@ -183,6 +196,7 @@ export interface Database {
   staff_documents: StaffDocument[];
   staff_overtime: StaffOvertime[];
   staff_leaves: StaffLeave[];
+  staff_fines: StaffFine[];
   staff_transactions: StaffTransaction[];
   categories: Category[];
   payment_methods: PaymentMethod[];

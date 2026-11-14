@@ -4,7 +4,7 @@ import { AlertTriangle, Download, FileText, Image as ImageIcon, Pencil, Plus, Tr
 import { PageHeader } from "@/components/app-shell";
 import { Button, Card, EmptyState, Input, Label, MicroLabel, Modal, SearchInput, SlideOver, StatCard, Toast } from "@/components/ui";
 import { DatePicker } from "@/components/date-picker";
-import { EmployeeOverview, LeavePanel, OvertimePanel, PaymentsPanel } from "@/components/employee-panels";
+import { EmployeeOverview, FinesPanel, LeavePanel, OvertimePanel, PaymentsPanel } from "@/components/employee-panels";
 import { useDb, useDbContext } from "@/lib/local-db";
 import { deleteStaffDocument, upsertStaff, upsertStaffDocument } from "@/lib/repo";
 import { SUPABASE_READY } from "@/lib/supabase";
@@ -352,11 +352,13 @@ function PersonDrawer({
   onDownload: (doc: StaffDocument) => void;
   onDelete: (doc: StaffDocument) => void;
 }) {
-  const [tab, setTab] = useState<"overview" | "docs" | "overtime" | "leave" | "money">("overview");
-  const tabs: { key: "overview" | "docs" | "overtime" | "leave" | "money"; label: string }[] = [
+  type Panel = "overview" | "docs" | "overtime" | "fines" | "leave" | "money";
+  const [tab, setTab] = useState<Panel>("overview");
+  const tabs: { key: Panel; label: string }[] = [
     { key: "overview", label: "Overview" },
     { key: "docs", label: documents.length ? `Documents (${documents.length})` : "Documents" },
     { key: "overtime", label: "Overtime" },
+    { key: "fines", label: "Fines" },
     { key: "leave", label: "Leave" },
     { key: "money", label: "Payments" },
   ];
@@ -420,6 +422,8 @@ function PersonDrawer({
         {tab === "overview" ? <EmployeeOverview person={person} editable={editable} /> : null}
 
         {tab === "overtime" ? <OvertimePanel person={person} editable={editable} /> : null}
+
+        {tab === "fines" ? <FinesPanel person={person} editable={editable} /> : null}
 
         {tab === "leave" ? <LeavePanel person={person} editable={editable} /> : null}
 

@@ -30,6 +30,7 @@ export function normalizeDb(db: Database): Database {
     staff_documents: Array.isArray(db.staff_documents) ? db.staff_documents : [],
     staff_overtime: Array.isArray(db.staff_overtime) ? db.staff_overtime : [],
     staff_leaves: Array.isArray(db.staff_leaves) ? db.staff_leaves : [],
+    staff_fines: Array.isArray(db.staff_fines) ? db.staff_fines : [],
     staff_transactions: Array.isArray(db.staff_transactions) ? db.staff_transactions : [],
   };
 }

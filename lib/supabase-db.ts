@@ -19,7 +19,7 @@ export const QUOTES_SQL = "supabase/migrations/2026-11-15-quotations.sql";
 export async function loadCloudDb(): Promise<Database> {
   schemaIssues = [];
   const sb = getSupabase();
-  const [tx, cats, vehs, pms, partiesRes, quotesRes, staffRes, staffDocsRes, otRes, leaveRes, payRes, profiles, settings] = await Promise.all([
+  const [tx, cats, vehs, pms, partiesRes, quotesRes, staffRes, staffDocsRes, otRes, leaveRes, fineRes, payRes, profiles, settings] = await Promise.all([
     sb.from("transactions").select("*").order("txn_date", { ascending: false }),
     sb.from("categories").select("*"),
     sb.from("vehicles").select("*"),
@@ -30,6 +30,7 @@ export async function loadCloudDb(): Promise<Database> {
     sb.from("staff_documents").select("*"),
     sb.from("staff_overtime").select("*"),
     sb.from("staff_leaves").select("*"),
+    sb.from("staff_fines").select("*"),
     sb.from("staff_transactions").select("*"),
     sb.from("profiles").select("*"),
     sb.from("app_settings").select("*").eq("id", 1).maybeSingle(),
@@ -69,14 +70,14 @@ export async function loadCloudDb(): Promise<Database> {
   }
 
   // Personnel tables / storage bucket arrive with their own migration.
-  if (staffRes.error || staffDocsRes.error || otRes.error || leaveRes.error || payRes.error) {
+  if (staffRes.error || staffDocsRes.error || otRes.error || leaveRes.error || fineRes.error || payRes.error) {
     console.warn(
       "employee tables unavailable:",
-      staffRes.error?.message ?? staffDocsRes.error?.message ?? otRes.error?.message ?? leaveRes.error?.message ?? payRes.error?.message
+      staffRes.error?.message ?? staffDocsRes.error?.message ?? otRes.error?.message ?? leaveRes.error?.message ?? fineRes.error?.message ?? payRes.error?.message
     );
     schemaIssues.push(
       "The Employee tab needs a one-time database update: the public.staff / staff_documents / staff_overtime / staff_leaves / " +
-        "staff_transactions tables and the staff-documents storage bucket are missing. Run " + PERSONNEL_SQL +
+        "staff_fines / staff_transactions tables and the staff-documents storage bucket are missing. Run " + PERSONNEL_SQL +
         " in the Supabase SQL editor, then reload."
     );
   }
@@ -95,6 +96,10 @@ export async function loadCloudDb(): Promise<Database> {
       hours: num(r.hours, 0),
     })),
     staff_leaves: (leaveRes.error ? [] : leaveRes.data ?? []) as unknown as Database["staff_leaves"],
+    staff_fines: ((fineRes.error ? [] : fineRes.data ?? []) as unknown as Database["staff_fines"]).map((r) => ({
+      ...r,
+      amount: num(r.amount, 0),
+    })),
     staff_transactions: ((payRes.error ? [] : payRes.data ?? []) as unknown as Database["staff_transactions"]).map((r) => ({
       ...r,
       amount: num(r.amount, 0),
