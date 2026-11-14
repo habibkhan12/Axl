@@ -58,7 +58,7 @@ export async function loadCloudDb(): Promise<Database> {
   if (staffRes.error || staffDocsRes.error) {
     console.warn("personnel tables unavailable:", staffRes.error?.message ?? staffDocsRes.error?.message);
     schemaIssues.push(
-      "Personnel needs a one-time database update: the public.staff / public.staff_documents tables and the " +
+      "The Employee tab needs a one-time database update: the public.staff / public.staff_documents tables and the " +
         "staff-documents storage bucket are missing. Run " + PERSONNEL_SQL + " in the Supabase SQL editor, then reload."
     );
   }

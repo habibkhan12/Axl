@@ -604,7 +604,7 @@ const TAB_DEFS: { key: string; label: string }[] = [
   { key: "suppliers", label: "Suppliers" },
   { key: "clients", label: "Clients" },
   { key: "fleet", label: "Fleet" },
-  { key: "personnel", label: "Personnel" },
+  { key: "personnel", label: "Employee" },
   { key: "dues", label: "Dues" },
 ];
 const ACCESS_LEVELS: { key: string; label: string }[] = [
