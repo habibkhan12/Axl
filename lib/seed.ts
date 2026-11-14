@@ -55,6 +55,7 @@ export function freshDb(): Database {
     staff_documents: [],
     staff_overtime: [],
     staff_leaves: [],
+    staff_fines: [],
     staff_transactions: [],
     categories: SEED_CATEGORIES,
     vehicles: SEED_VEHICLES,
