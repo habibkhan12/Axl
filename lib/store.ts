@@ -11,6 +11,7 @@ export interface TransactionInput {
   fuel_liters?: number | null;
   job_ref?: string | null;
   voucher_no?: string | null;
+  quote_id?: string | null;
   description?: string | null;
   notes?: string | null;
   receipt_url?: string | null;
@@ -24,6 +25,7 @@ export function normalizeDb(db: Database): Database {
   return {
     ...db,
     parties: Array.isArray(db.parties) ? db.parties : [],
+    quotes: Array.isArray(db.quotes) ? db.quotes : [],
     staff: Array.isArray(db.staff) ? db.staff : [],
     staff_documents: Array.isArray(db.staff_documents) ? db.staff_documents : [],
     staff_overtime: Array.isArray(db.staff_overtime) ? db.staff_overtime : [],

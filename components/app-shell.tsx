@@ -2,7 +2,7 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ArrowLeftRight, Bell, CarFront, Grid2X2, Landmark, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Plus, Search, Settings2, Truck, UserRound, Users, X } from "lucide-react";
+import { ArrowLeftRight, Bell, CarFront, FileSignature, Grid2X2, Landmark, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Plus, Search, Settings2, Truck, UserRound, Users, X } from "lucide-react";
 import type { Kind } from "@/lib/types";
 import { DbProvider, useDbContext, canViewPage } from "@/lib/local-db";
 import { activeUser } from "@/lib/repo";
@@ -105,6 +105,7 @@ const NAV = [
   { href: "/transactions", label: "Transactions", icon: ArrowLeftRight, section: "main" },
   { href: "/suppliers", label: "Suppliers", icon: Truck, section: "main" },
   { href: "/clients", label: "Clients", icon: Users, section: "main" },
+  { href: "/quotes", label: "Quotations", icon: FileSignature, section: "main" },
   { href: "/fleet", label: "Fleet", icon: CarFront, section: "main" },
   { href: "/personnel", label: "Employee", icon: UserRound, section: "main" },
   { href: "/dues", label: "Dues & fines", icon: Landmark, section: "main" },
@@ -116,6 +117,7 @@ const PAGE_LABELS: Record<string, string> = {
   "/transactions": "Transactions",
   "/suppliers": "Suppliers",
   "/clients": "Clients",
+  "/quotes": "Quotations",
   "/fleet": "Fleet",
   "/personnel": "Employee",
   "/dues": "Dues & fines",
@@ -152,9 +154,10 @@ function SaveStatus() {
 
 /** Open Quick Entry, optionally pre-attached to a supplier/client profile. */
 export type QuickEntryParty = { id: string; name: string };
+export type QuickEntryQuote = { id: string; quote_no: string };
 
 interface QuickEntryContextValue {
-  openQuickEntry: (kind?: Kind, party?: QuickEntryParty | null) => void;
+  openQuickEntry: (kind?: Kind, party?: QuickEntryParty | null, quote?: QuickEntryQuote | null) => void;
 }
 
 const QuickEntryContext = createContext<QuickEntryContextValue>({ openQuickEntry: () => {} });
@@ -170,6 +173,7 @@ function Shell({ children }: { children: React.ReactNode }) {
   const [qeOpen, setQeOpen] = useState(false);
   const [qeKind, setQeKind] = useState<Kind>("expense");
   const [qeParty, setQeParty] = useState<QuickEntryParty | null>(null);
+  const [qeQuote, setQeQuote] = useState<QuickEntryQuote | null>(null);
   const [palOpen, setPalOpen] = useState(false);
   const [collapsed, setCollapsedInit] = useState<boolean>(() => (typeof window !== "undefined" ? window.localStorage.getItem("axl-sidebar-collapsed") === "1" : false));
   const setCollapsed = (v: boolean) => {
@@ -203,11 +207,12 @@ function Shell({ children }: { children: React.ReactNode }) {
     scrollRef.current?.scrollTo({ top: 0 });
   }, [pathname]);
 
-  function openQuickEntry(kind: Kind = "expense", party: QuickEntryParty | null = null) {
+  function openQuickEntry(kind: Kind = "expense", party: QuickEntryParty | null = null, quote: QuickEntryQuote | null = null) {
     // Quick entry always creates a transaction — needs transactions edit access.
     if (!canEdit("/transactions")) return;
     setQeKind(kind);
     setQeParty(party);
+    setQeQuote(quote);
     setQeOpen(true);
   }
   useKeyboardShortcut("n", () => openQuickEntry("expense"));
@@ -485,7 +490,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           </div>
         </Modal>
 
-        <QuickEntry open={qeOpen} onClose={() => setQeOpen(false)} db={db} setDb={setDb} initialKind={qeKind} initialParty={qeParty} />
+        <QuickEntry open={qeOpen} onClose={() => setQeOpen(false)} db={db} setDb={setDb} initialKind={qeKind} initialParty={qeParty} initialQuote={qeQuote} />
         <CommandPalette open={palOpen} onClose={() => setPalOpen(false)} db={db} />
       </div>
     </QuickEntryContext.Provider>

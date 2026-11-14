@@ -5,7 +5,7 @@ export type Role = "owner" | "editor" | "viewer";
 
 /** Per-tab access level. "none" = tab hidden entirely. */
 export type TabAccess = "none" | "view" | "edit";
-export type TabKey = "dashboard" | "transactions" | "suppliers" | "clients" | "fleet" | "personnel" | "dues" | "settings";
+export type TabKey = "dashboard" | "transactions" | "suppliers" | "clients" | "quotes" | "fleet" | "personnel" | "dues" | "settings";
 
 /** What tabs a non-admin account can see/edit. Admin always sees everything. */
 export interface TabAccessMap {
@@ -13,6 +13,7 @@ export interface TabAccessMap {
   transactions?: TabAccess;
   suppliers?: TabAccess;
   clients?: TabAccess;
+  quotes?: TabAccess;
   fleet?: TabAccess;
   personnel?: TabAccess;
   dues?: TabAccess;
@@ -71,6 +72,8 @@ export interface Transaction {
   payment_method_id?: string | null;
   /** Supplier on an expense, client on an income entry. */
   party_id?: string | null;
+  /** Quotation (project) this entry belongs to. */
+  quote_id?: string | null;
   vehicle_id?: string | null; // only meaningful for Fuel / Vehicles
   fuel_liters?: number | null;
   job_ref?: string | null; // "AY12017"
@@ -95,6 +98,22 @@ export interface Settings {
   monthly_profit_target?: number; // optional so pre-existing localStorage dbs load fine
   monthly_expense_target?: number;
   active_user_id: string; // localStorage stand-in for auth.session
+}
+
+/** Where a quotation sits in its life cycle. */
+export type QuoteStatus = "review" | "approved" | "completed" | "rejected";
+
+/** A quotation — treated as a project once approved. */
+export interface Quote {
+  id: string;
+  quote_no: string;
+  /** The client party this quote belongs to. */
+  client_id?: string | null;
+  amount: number;
+  status: QuoteStatus;
+  quote_date?: string | null;
+  notes?: string | null;
+  created_at?: string;
 }
 
 /** An employee tracked on the Employee tab. */
@@ -159,6 +178,7 @@ export interface StaffDocument {
 export interface Database {
   vehicles: Vehicle[];
   parties: Party[];
+  quotes: Quote[];
   staff: StaffMember[];
   staff_documents: StaffDocument[];
   staff_overtime: StaffOvertime[];

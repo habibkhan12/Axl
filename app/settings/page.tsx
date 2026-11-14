@@ -603,6 +603,7 @@ const TAB_DEFS: { key: string; label: string }[] = [
   { key: "transactions", label: "Transactions" },
   { key: "suppliers", label: "Suppliers" },
   { key: "clients", label: "Clients" },
+  { key: "quotes", label: "Quotations" },
   { key: "fleet", label: "Fleet" },
   { key: "personnel", label: "Employee" },
   { key: "dues", label: "Dues" },
