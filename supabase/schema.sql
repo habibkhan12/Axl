@@ -110,6 +110,43 @@ create table if not exists public.staff_documents (
 create index if not exists staff_documents_staff_idx on public.staff_documents (staff_id);
 create index if not exists staff_documents_expiry_idx on public.staff_documents (expiry_date);
 
+-- Salary, overtime, leave and money movements per employee.
+alter table public.staff add column if not exists salary numeric;
+
+create table if not exists public.staff_overtime (
+  id text primary key,
+  staff_id text not null references public.staff(id) on delete cascade,
+  work_date date not null,
+  hours numeric not null check (hours > 0),
+  note text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists staff_overtime_staff_date_idx on public.staff_overtime (staff_id, work_date);
+
+create table if not exists public.staff_leaves (
+  id text primary key,
+  staff_id text not null references public.staff(id) on delete cascade,
+  from_date date not null,
+  to_date date not null,
+  note text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists staff_leaves_staff_from_idx on public.staff_leaves (staff_id, from_date);
+
+create table if not exists public.staff_transactions (
+  id text primary key,
+  staff_id text not null references public.staff(id) on delete cascade,
+  kind text not null check (kind in ('paid','received')),
+  amount numeric not null check (amount > 0),
+  txn_date date not null,
+  note text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists staff_transactions_staff_date_idx on public.staff_transactions (staff_id, txn_date);
+
 -- 4. TRANSACTIONS
 create table if not exists public.transactions (
   id text primary key,
@@ -203,6 +240,9 @@ alter table public.vehicles enable row level security;
 alter table public.payment_methods enable row level security;
 alter table public.staff enable row level security;
 alter table public.staff_documents enable row level security;
+alter table public.staff_overtime enable row level security;
+alter table public.staff_leaves enable row level security;
+alter table public.staff_transactions enable row level security;
 alter table public.transactions enable row level security;
 
 -- Profiles: users see the team; only owner edits
@@ -270,6 +310,25 @@ drop policy if exists staff_docs_read on public.staff_documents;
 create policy staff_docs_read on public.staff_documents for select to authenticated using (true);
 drop policy if exists staff_docs_write on public.staff_documents;
 create policy staff_docs_write on public.staff_documents for all to authenticated
+  using (public.my_role() in ('owner','editor')) with check (public.my_role() in ('owner','editor'));
+
+-- Overtime, leave and payments: everyone reads, owner/editor writes
+drop policy if exists staff_overtime_read on public.staff_overtime;
+create policy staff_overtime_read on public.staff_overtime for select to authenticated using (true);
+drop policy if exists staff_overtime_write on public.staff_overtime;
+create policy staff_overtime_write on public.staff_overtime for all to authenticated
+  using (public.my_role() in ('owner','editor')) with check (public.my_role() in ('owner','editor'));
+
+drop policy if exists staff_leaves_read on public.staff_leaves;
+create policy staff_leaves_read on public.staff_leaves for select to authenticated using (true);
+drop policy if exists staff_leaves_write on public.staff_leaves;
+create policy staff_leaves_write on public.staff_leaves for all to authenticated
+  using (public.my_role() in ('owner','editor')) with check (public.my_role() in ('owner','editor'));
+
+drop policy if exists staff_txn_read on public.staff_transactions;
+create policy staff_txn_read on public.staff_transactions for select to authenticated using (true);
+drop policy if exists staff_txn_write on public.staff_transactions;
+create policy staff_txn_write on public.staff_transactions for all to authenticated
   using (public.my_role() in ('owner','editor')) with check (public.my_role() in ('owner','editor'));
 
 -- Private bucket for the uploaded files

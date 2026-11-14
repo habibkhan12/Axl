@@ -443,6 +443,9 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
           ["parties", before.parties, db.parties],
           ["staff", before.staff, db.staff],
           ["staff_documents", before.staff_documents, db.staff_documents],
+          ["staff_overtime", before.staff_overtime, db.staff_overtime],
+          ["staff_leaves", before.staff_leaves, db.staff_leaves],
+          ["staff_transactions", before.staff_transactions, db.staff_transactions],
           ["vehicles", before.vehicles, db.vehicles],
           ["payment_methods", before.payment_methods, db.payment_methods],
         ] as const;

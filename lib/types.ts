@@ -97,13 +97,46 @@ export interface Settings {
   active_user_id: string; // localStorage stand-in for auth.session
 }
 
-/** A staff member tracked on the Personnel tab. */
+/** An employee tracked on the Employee tab. */
 export interface StaffMember {
   id: string;
   name: string;
   phone?: string | null;
   notes?: string | null;
+  /** Monthly salary. Optional — some staff are paid per job. */
+  salary?: number | null;
   archived?: boolean;
+  created_at?: string;
+}
+
+/** One day's overtime for an employee. */
+export interface StaffOvertime {
+  id: string;
+  staff_id: string;
+  work_date: string;
+  hours: number;
+  note?: string | null;
+  created_at?: string;
+}
+
+/** A leave period, inclusive of both dates. */
+export interface StaffLeave {
+  id: string;
+  staff_id: string;
+  from_date: string;
+  to_date: string;
+  note?: string | null;
+  created_at?: string;
+}
+
+/** Money handed to an employee (`paid`) or received from them (`received`). */
+export interface StaffTransaction {
+  id: string;
+  staff_id: string;
+  kind: "paid" | "received";
+  amount: number;
+  txn_date: string;
+  note?: string | null;
   created_at?: string;
 }
 
@@ -128,6 +161,9 @@ export interface Database {
   parties: Party[];
   staff: StaffMember[];
   staff_documents: StaffDocument[];
+  staff_overtime: StaffOvertime[];
+  staff_leaves: StaffLeave[];
+  staff_transactions: StaffTransaction[];
   categories: Category[];
   payment_methods: PaymentMethod[];
   transactions: Transaction[];
