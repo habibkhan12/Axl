@@ -2,10 +2,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, CarFront, Download, Hash, Plus, Receipt, Scale, Trash2, X } from "lucide-react";
 import { useDb, useDbContext } from "@/lib/local-db";
-import type { Transaction, Kind } from "@/lib/types";
+import type { Transaction, Kind, Party } from "@/lib/types";
 // (canEdit comes from useDbContext)
 import type { TransactionInput } from "@/lib/store";
-import { updateTransaction } from "@/lib/repo";
+import { updateTransaction, ensureParty } from "@/lib/repo";
 import { rowsInRange, monthBounds, totalsOf } from "@/lib/analytics";
 import { fmtAED, fmtDate, fmtDateShort, fmtTime, todayISO, monthLabel } from "@/lib/format";
 import {
@@ -26,6 +26,7 @@ import {
 } from "@/components/ui";
 import { PageHeader, useQuickEntry } from "@/components/app-shell";
 import { CalendarPicker } from "@/components/date-picker";
+import { PartyInput } from "@/components/party-input";
 
 type SortKey = "date" | "amount";
 
@@ -441,7 +442,23 @@ export default function TransactionsPage() {
         )}
       </Card>
 
-      <ViewModal tx={viewing} onClose={() => setViewing(null)} canWrite={canEditTxn} nameOf={nameOf} onSave={(id, patch) => { setDb((prev) => (prev ? updateTransaction(prev, id, patch) : prev)); setViewing(null); }} />
+      <ViewModal
+        tx={viewing}
+        onClose={() => setViewing(null)}
+        canWrite={canEditTxn}
+        nameOf={nameOf}
+        parties={db.parties}
+        onSave={(id, patch, partyName) => {
+          setDb((prev) => {
+            if (!prev) return prev;
+            const row = prev.transactions.find((t) => t.id === id);
+            // Existing entries get their supplier/client here, or a new one is created.
+            const { db: next, party } = ensureParty(prev, row?.kind === "income" ? "client" : "supplier", partyName);
+            return updateTransaction(next, id, { ...patch, party_id: party?.id ?? null });
+          });
+          setViewing(null);
+        }}
+      />
 
       <ConfirmDelete
         open={bulkDeleting}
@@ -474,18 +491,21 @@ function ViewModal({
   onSave,
   canWrite,
   nameOf,
+  parties,
 }: {
   tx: Transaction | null;
   onClose: () => void;
-  onSave: (id: string, patch: Partial<TransactionInput>) => void;
+  onSave: (id: string, patch: Partial<TransactionInput>, partyName: string) => void;
   canWrite: boolean;
   nameOf: { category: (id: string | null | undefined) => string; method: (id: string | null | undefined) => string; vehicle: (id: string | null | undefined) => string; user: (id: string) => string; party: (id: string | null | undefined) => string };
+  parties: Party[];
 }) {
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState("");
   const [desc, setDesc] = useState("");
   const [jobRef, setJobRef] = useState("");
   const [notes, setNotes] = useState("");
+  const [partyName, setPartyName] = useState("");
 
   useEffect(() => {
     if (tx) {
@@ -494,8 +514,9 @@ function ViewModal({
       setDesc(tx.description ?? "");
       setJobRef(tx.job_ref ?? "");
       setNotes(tx.notes ?? "");
+      setPartyName(tx.party_id ? parties.find((p) => p.id === tx.party_id)?.name ?? "" : "");
     }
-  }, [tx]);
+  }, [tx, parties]);
 
   if (!tx) return null;
 
@@ -523,13 +544,17 @@ function ViewModal({
             <Button
               variant="primary"
               onClick={() =>
-                onSave(tx.id, {
-                  amount: parseFloat(amount) || tx.amount,
-                  txn_date: date,
-                  description: desc,
-                  job_ref: jobRef,
-                  notes,
-                })
+                onSave(
+                  tx.id,
+                  {
+                    amount: parseFloat(amount) || tx.amount,
+                    txn_date: date,
+                    description: desc,
+                    job_ref: jobRef,
+                    notes,
+                  },
+                  partyName
+                )
               }
             >
               Save changes
@@ -556,6 +581,17 @@ function ViewModal({
         <div>
           <Label>Description</Label>
           <Input value={desc} onChange={(e) => setDesc(e.target.value)} disabled={!canWrite} placeholder="—" />
+        </div>
+        <div>
+          <Label>{tx.kind === "income" ? "Client" : "Supplier"}</Label>
+          <PartyInput
+            value={partyName}
+            onChange={setPartyName}
+            parties={parties.filter((p) => p.kind === (tx.kind === "income" ? "client" : "supplier"))}
+            kindLabel={tx.kind === "income" ? "client" : "supplier"}
+            placeholder="Search or type a new name"
+            disabled={!canWrite}
+          />
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>

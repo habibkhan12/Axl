@@ -1,7 +1,8 @@
 "use client";
 import React, { useMemo, useState } from "react";
-import { Plus, Receipt, Truck, Users } from "lucide-react";
+import { Link2, Plus, Receipt, Truck, Users } from "lucide-react";
 import { PageHeader, useQuickEntry } from "@/components/app-shell";
+import { LinkTransactionsModal } from "@/components/link-transactions";
 import { Button, Card, EmptyState, Input, Label, MicroLabel, Modal, SearchInput, SelectMenu, SlideOver, StatCard, Toast } from "@/components/ui";
 import { useDb, useDbContext } from "@/lib/local-db";
 import { upsertParty } from "@/lib/repo";
@@ -47,6 +48,7 @@ export function PartyPage({ kind }: { kind: PartyKind }) {
 
   const [q, setQ] = useState("");
   const [adding, setAdding] = useState(false);
+  const [linking, setLinking] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -96,6 +98,23 @@ export function PartyPage({ kind }: { kind: PartyKind }) {
   function addEntry(party: Party) {
     openQuickEntry(cfg.txKind, { id: party.id, name: party.name });
     setSelectedId(null);
+  }
+
+  /** Attach previously entered transactions to this supplier/client. */
+  function linkTransactions(party: Party, ids: string[]) {
+    if (ids.length === 0) return;
+    const stamp = new Date().toISOString();
+    const idSet = new Set(ids);
+    setDb((prev) =>
+      prev
+        ? {
+            ...prev,
+            transactions: prev.transactions.map((t) => (idSet.has(t.id) ? { ...t, party_id: party.id, updated_at: stamp } : t)),
+          }
+        : prev
+    );
+    setLinking(false);
+    setToast(`${ids.length} ${ids.length === 1 ? "entry" : "entries"} linked to ${party.name}.`);
   }
 
   function addParty(name: string, phone: string, email: string, notes: string) {
@@ -253,6 +272,22 @@ export function PartyPage({ kind }: { kind: PartyKind }) {
           txns={selectedTxns}
           onClose={() => setSelectedId(null)}
           onAdd={editable ? () => addEntry(selected) : undefined}
+          onLink={editable ? () => setLinking(true) : undefined}
+          linkedCount={db.transactions.filter((t) => t.party_id === selected.id && t.kind === cfg.txKind).length}
+        />
+      ) : null}
+
+      {linking && selected ? (
+        <LinkTransactionsModal
+          party={selected}
+          noun={cfg.noun}
+          txKind={cfg.txKind}
+          transactions={db.transactions}
+          categories={db.categories}
+          methods={db.payment_methods}
+          parties={db.parties}
+          onClose={() => setLinking(false)}
+          onLink={(ids) => linkTransactions(selected, ids)}
         />
       ) : null}
 
@@ -324,6 +359,8 @@ function PartyProfile({
   txns,
   onClose,
   onAdd,
+  onLink,
+  linkedCount,
 }: {
   party: Party;
   noun: string;
@@ -331,6 +368,8 @@ function PartyProfile({
   txns: Transaction[];
   onClose: () => void;
   onAdd?: () => void;
+  onLink?: () => void;
+  linkedCount: number;
 }) {
   const { db } = useDb();
   const [month, setMonth] = useState("all");
@@ -383,6 +422,11 @@ function PartyProfile({
       footer={
         <>
           <Button onClick={onClose}>Close</Button>
+          {onLink ? (
+            <Button onClick={onLink}>
+              <Link2 size={13} /> Link existing
+            </Button>
+          ) : null}
           {onAdd ? (
             <Button variant="primary" onClick={onAdd}>
               <Plus size={13} /> Add {txKind === "expense" ? "expense" : "income"}
@@ -426,11 +470,18 @@ function PartyProfile({
           {monthly.length === 0 ? (
             <div className="rounded-xl border border-dashed border-[#e5e5e2] px-3 py-3 text-[12px] text-zinc-400">
               <p>No entries linked to this {noun} yet.</p>
-              {onAdd ? (
-                <button onClick={onAdd} className="mt-2 inline-flex items-center gap-1 rounded-lg bg-zinc-900 px-2.5 py-1.5 text-[11px] font-medium text-white transition-colors hover:bg-zinc-700">
-                  <Plus size={11} /> Add transaction
-                </button>
-              ) : null}
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {onAdd ? (
+                  <button onClick={onAdd} className="inline-flex items-center gap-1 rounded-lg bg-zinc-900 px-2.5 py-1.5 text-[11px] font-medium text-white transition-colors hover:bg-zinc-700">
+                    <Plus size={11} /> Add transaction
+                  </button>
+                ) : null}
+                {onLink ? (
+                  <button onClick={onLink} className="inline-flex items-center gap-1 rounded-lg border border-[#e5e5e2] bg-white px-2.5 py-1.5 text-[11px] font-medium text-zinc-700 transition-colors hover:border-zinc-400">
+                    <Link2 size={11} /> Link existing entries
+                  </button>
+                ) : null}
+              </div>
             </div>
           ) : (
             <div className="overflow-hidden rounded-xl border border-[#eae4d9]">
@@ -485,8 +536,9 @@ function PartyProfile({
           )}
         </div>
 
-        <div className="flex items-center gap-1.5 text-[10px] text-zinc-300">
-          <Receipt size={11} /> Linked by {noun} on entry
+        <div className="flex items-center justify-between gap-2 text-[10px] text-zinc-300">
+          <span className="flex items-center gap-1.5"><Receipt size={11} /> Linked by {noun} on entry</span>
+          {linkedCount > 0 ? <span>{linkedCount} linked</span> : null}
         </div>
       </div>
     </SlideOver>
