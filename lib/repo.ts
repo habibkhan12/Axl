@@ -73,6 +73,15 @@ export function deleteStaffDocument(db: Database, id: string): Database {
   return { ...db, staff_documents: db.staff_documents.filter((d) => d.id !== id) };
 }
 
+/** Insert-or-replace a row in any list keyed by `id` (overtime, leave, payments). */
+export function upsertById<T extends { id: string }>(list: T[], row: T): T[] {
+  return list.some((x) => x.id === row.id) ? list.map((x) => (x.id === row.id ? row : x)) : [...list, row];
+}
+
+export function removeById<T extends { id: string }>(list: T[], id: string): T[] {
+  return list.filter((x) => x.id !== id);
+}
+
 export function upsertParty(db: Database, party: Party): Database {
   const exists = db.parties.some((p) => p.id === party.id);
   return { ...db, parties: exists ? db.parties.map((p) => (p.id === party.id ? party : p)) : [...db.parties, party] };
