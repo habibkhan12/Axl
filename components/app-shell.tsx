@@ -7,7 +7,7 @@ import type { Kind } from "@/lib/types";
 import { DbProvider, useDbContext, canViewPage } from "@/lib/local-db";
 import { activeUser } from "@/lib/repo";
 import { AuthGate } from "@/components/auth-gate";
-import { Avatar, useKeyboardShortcut } from "@/components/ui";
+import { Avatar, Button, Modal, useKeyboardShortcut } from "@/components/ui";
 import { loadNotifs, markAllRead, markRead, notifTarget, type NotifEvent } from "@/lib/notifications";
 
 function NotificationBell() {
@@ -185,6 +185,8 @@ function Shell({ children }: { children: React.ReactNode }) {
   }, []);
   const scrollRef = React.useRef<HTMLElement | null>(null);
   const [mobileNav, setMobileNav] = useState(false);
+  // Signing out is never a single-click action — it asks first.
+  const [askSignOut, setAskSignOut] = useState(false);
   const { session, profile, role, canEdit, signOut } = useDbContext();
 
   // Restricted accounts only see the tabs they were granted (admins see all).
@@ -366,7 +368,7 @@ function Shell({ children }: { children: React.ReactNode }) {
                         <div className="truncate text-xs font-semibold text-zinc-900">{user.name}</div>
                         <div className="truncate text-[10px] text-zinc-400">{email || role}</div>
                       </div>
-                      <UserMenu onSignOut={() => void signOut()} />
+                      <UserMenu onSignOut={() => setAskSignOut(true)} />
                     </div>
                   )
                 ) : collapsed ? (
@@ -457,7 +459,7 @@ function Shell({ children }: { children: React.ReactNode }) {
               ))}
               {session ? (
                 <button
-                  onClick={() => { setMobileNav(false); void signOut(); }}
+                  onClick={() => { setMobileNav(false); setAskSignOut(true); }}
                   className="mt-3 flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-medium text-zinc-500"
                 >
                   <LogOut size={15} /> Sign out
@@ -466,6 +468,22 @@ function Shell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
         ) : null}
+
+        <Modal open={askSignOut} onClose={() => setAskSignOut(false)} title="Sign out?">
+          <p className="mb-4 text-sm text-zinc-600">You’ll need to sign in again to get back into the books. Everything you’ve saved is already stored.</p>
+          <div className="flex justify-end gap-2">
+            <Button onClick={() => setAskSignOut(false)}>Cancel</Button>
+            <Button
+              variant="danger"
+              onClick={() => {
+                setAskSignOut(false);
+                void signOut();
+              }}
+            >
+              Sign out
+            </Button>
+          </div>
+        </Modal>
 
         <QuickEntry open={qeOpen} onClose={() => setQeOpen(false)} db={db} setDb={setDb} initialKind={qeKind} initialParty={qeParty} />
         <CommandPalette open={palOpen} onClose={() => setPalOpen(false)} db={db} />
