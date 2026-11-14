@@ -1,4 +1,4 @@
-import type { Database, Transaction, Category, Vehicle, PaymentMethod, User } from "./types";
+import type { Database, Transaction, Category, Vehicle, PaymentMethod, User, Party, PartyKind } from "./types";
 import type { TransactionInput } from "./store";
 
 export function uid(prefix: string): string {
@@ -16,6 +16,7 @@ export function addTransaction(db: Database, input: TransactionInput): Database 
     amount: Math.abs(input.amount),
     category_id: input.category_id ?? null,
     payment_method_id: input.payment_method_id ?? null,
+    party_id: input.party_id ?? null,
     vehicle_id: input.vehicle_id ?? null,
     fuel_liters: input.fuel_liters ?? null,
     job_ref: input.job_ref?.trim() ? input.job_ref.trim() : null,
@@ -53,6 +54,31 @@ export function upsertCategory(db: Database, cat: Category): Database {
 export function upsertVehicle(db: Database, v: Vehicle): Database {
   const exists = db.vehicles.some((x) => x.id === v.id);
   return { ...db, vehicles: exists ? db.vehicles.map((x) => (x.id === v.id ? v : x)) : [...db.vehicles, v] };
+}
+
+export function upsertParty(db: Database, party: Party): Database {
+  const exists = db.parties.some((p) => p.id === party.id);
+  return { ...db, parties: exists ? db.parties.map((p) => (p.id === party.id ? party : p)) : [...db.parties, party] };
+}
+
+/** Case-insensitive lookup of a supplier/client by name. */
+export function findParty(db: Database, kind: PartyKind, name: string): Party | undefined {
+  const needle = name.trim().toLowerCase();
+  if (!needle) return undefined;
+  return db.parties.find((p) => p.kind === kind && !p.archived && p.name.trim().toLowerCase() === needle);
+}
+
+/**
+ * Resolve a typed name to a party: reuse the existing record when the name
+ * matches (ignoring case/spacing), otherwise create it on the spot.
+ */
+export function ensureParty(db: Database, kind: PartyKind, name: string): { db: Database; party: Party | null } {
+  const trimmed = name.trim().replace(/\s+/g, " ");
+  if (!trimmed) return { db, party: null };
+  const existing = findParty(db, kind, trimmed);
+  if (existing) return { db, party: existing };
+  const party: Party = { id: uid("pt"), kind, name: trimmed, created_at: new Date().toISOString() };
+  return { db: { ...db, parties: [...db.parties, party] }, party };
 }
 
 export function upsertPaymentMethod(db: Database, pm: PaymentMethod): Database {

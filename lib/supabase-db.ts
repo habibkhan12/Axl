@@ -2,13 +2,27 @@
 import type { Database } from "./types";
 import { getSupabase } from "./supabase";
 
+/**
+ * Database objects the deployed project is missing. Set on every cloud load so
+ * the UI can say exactly what to run instead of failing with a raw Postgres error.
+ */
+let schemaIssues: string[] = [];
+
+export function getSchemaIssues(): string[] {
+  return schemaIssues;
+}
+
+export const PARTIES_SQL = "supabase/migrations/2026-11-14-suppliers-clients.sql";
+
 export async function loadCloudDb(): Promise<Database> {
+  schemaIssues = [];
   const sb = getSupabase();
-  const [tx, cats, vehs, pms, profiles, settings] = await Promise.all([
+  const [tx, cats, vehs, pms, partiesRes, profiles, settings] = await Promise.all([
     sb.from("transactions").select("*").order("txn_date", { ascending: false }),
     sb.from("categories").select("*"),
     sb.from("vehicles").select("*"),
     sb.from("payment_methods").select("*"),
+    sb.from("parties").select("*"),
     sb.from("profiles").select("*"),
     sb.from("app_settings").select("*").eq("id", 1).maybeSingle(),
   ]);
@@ -27,8 +41,19 @@ export async function loadCloudDb(): Promise<Database> {
     return Number.isFinite(n) ? n : fallback;
   };
 
+  // The parties table arrives with the suppliers/clients migration — don't take
+  // the whole app down if a database has not run it yet, but say so in the UI.
+  if (partiesRes.error) {
+    console.warn("parties table unavailable:", partiesRes.error.message);
+    schemaIssues = [
+      "Suppliers & Clients need a one-time database update: the public.parties table is missing. " +
+        "Run " + PARTIES_SQL + " in the Supabase SQL editor, then reload.",
+    ];
+  }
+
   return {
     transactions: (tx.data ?? []) as unknown as Database["transactions"],
+    parties: (partiesRes.error ? [] : partiesRes.data ?? []) as unknown as Database["parties"],
     categories: (cats.data ?? []) as unknown as Database["categories"],
     vehicles: (vehs.data ?? []) as unknown as Database["vehicles"],
     payment_methods: (pms.data ?? []) as unknown as Database["payment_methods"],

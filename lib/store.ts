@@ -1,4 +1,4 @@
-import type { Transaction } from "./types";
+import type { Database, Transaction } from "./types";
 
 export interface TransactionInput {
   kind: Transaction["kind"];
@@ -6,6 +6,7 @@ export interface TransactionInput {
   amount: number;
   category_id?: string | null;
   payment_method_id?: string | null;
+  party_id?: string | null;
   vehicle_id?: string | null;
   fuel_liters?: number | null;
   job_ref?: string | null;
@@ -17,3 +18,8 @@ export interface TransactionInput {
 }
 
 export const STORAGE_KEY = "axl-books-db-v1";
+
+/** Fill in collections added after a database was written (old local data, backups). */
+export function normalizeDb(db: Database): Database {
+  return { ...db, parties: Array.isArray(db.parties) ? db.parties : [] };
+}

@@ -49,6 +49,7 @@ export const SEED_PAYMENT_METHODS: PaymentMethod[] = [
 
 export function freshDb(): Database {
   return {
+    parties: [],
     categories: SEED_CATEGORIES,
     vehicles: SEED_VEHICLES,
     payment_methods: SEED_PAYMENT_METHODS,

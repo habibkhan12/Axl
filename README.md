@@ -28,7 +28,11 @@ the cloud**:
 
 ### One-time setup
 
-1. **Netlify:** connect the repo, then set environment variables in
+1. **Supabase:** run `supabase/schema.sql` once in the SQL editor for a new
+   project. On an existing project, also run any newer file in
+   `supabase/migrations/` (currently `2026-11-14-suppliers-clients.sql`, which
+   adds the `public.parties` table behind the Suppliers and Clients tabs).
+2. **Netlify:** connect the repo, then set environment variables in
    *Site configuration → Environment variables*:
    - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`
    - `SUPABASE_SERVICE_ROLE_KEY` (server-only — powers account management + dues checks)
@@ -56,8 +60,9 @@ Press **N** anywhere for Quick Entry. Enter saves and stays open for the next bi
 |---|---|
 | `/` Dashboard | Period presets, KPI cards, monthly target ring (seeded at AED 163,350), daily income-vs-expense chart, category breakdown, payment-method mix |
 | `/transactions` | Unified ledger (income + expense), 7 filters + full-text search over job refs, inline edit, delete, CSV export |
-| `/fuel` | Per-vehicle fuel cards with daily bars, vehicle × day heatmap, drill-down; AED/Liter when you record liters |
-| `/parties` | Ranked clients & suppliers for any month with drill-down, instant-create, merge duplicates |
+| `/fleet` | Per-vehicle fuel cards with daily bars, vehicle × day heatmap, drill-down, registry and Salik details |
+| `/suppliers` | Every vendor with total spent, this-month spend and full per-supplier history; add from here or from an expense's Supplier field |
+| `/clients` | Every customer with total received and full per-client income history; add from here or from an income's Client field |
 | `/settings` | Monthly target, categories (14 from your workbook), 11 vehicles + Company, payment methods, users/roles, backups, demo data |
 
 ## Seeded reference data (from Sep 2026 workbook)
