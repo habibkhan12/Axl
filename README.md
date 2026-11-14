@@ -25,7 +25,6 @@ the cloud**:
 |---|---|---|
 | App + API routes | Netlify (Next.js runtime) | `netlify.toml` |
 | CI — typecheck + build on every push/PR | GitHub Actions | `.github/workflows/ci.yml` |
-| Dues sweep every 6 h (cloud cron) | GitHub Actions → deployed site | `.github/workflows/dues-cron.yml` |
 
 ### One-time setup
 
@@ -33,27 +32,21 @@ the cloud**:
    *Site configuration → Environment variables*:
    - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`
    - `SUPABASE_SERVICE_ROLE_KEY` (server-only — powers account management + dues checks)
-   - `CRON_SECRET` (any long random string — authorizes the cloud cron)
-2. **GitHub:** in *Settings → Secrets and variables → Actions*, add:
-   - `SITE_URL` — your Netlify URL, e.g. `https://axl-books.netlify.app`
-   - `CRON_SECRET` — the same value as above
 
-The scheduled sweep then runs entirely in the cloud: GitHub Actions calls
-`POST /api/dues/check` on your Netlify site every 6 hours (also triggerable
-manually from the Actions tab via *Run workflow*).
+### What the dues checker actually automates
 
-### A note on the browser-based checkers
+Three portals have a working automated lookup — Salik (guest balance), Dubai
+Police (fines by traffic code) and Ajman Sewerage (balance by account number).
+They drive a real Chrome via patchright + ffmpeg, a **desktop-server**
+capability, so when the app runs on Netlify they report "manual" and the Dues
+page's **Check** button just records that status.
 
-Salik / Dubai Police / Ajman Sewerage live checks drive a real Chrome via
-patchright + ffmpeg — a **desktop-server** capability that serverless
-functions don't have. On Netlify those providers degrade gracefully to a
-"manual" status (HTTP-only providers — Etihad WE, du, e& — still fully work).
-Two ways to restore live browser checks:
+Every other portal (EVG, Etihad Water & Electricity, du, e&) is **manual**:
+add the account for the payment link, open it, and pay. No automation runs
+for them.
 
-- Leave the app running on an always-on desktop/server too (in-process
-  scheduler handles it there — the scheduler auto-disables itself on Netlify), or
-- Point `DUES_WORKER_URL` (Netlify env var) at a small always-on machine
-  running the worker HTTP bridge; Netlify functions then proxy browser ops to it.
+On a desktop/server host the in-process scheduler sweeps the automated
+accounts ~90s after boot and then every 6 hours (it auto-disables on Netlify).
 
 Press **N** anywhere for Quick Entry. Enter saves and stays open for the next bill.
 

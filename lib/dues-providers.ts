@@ -57,14 +57,11 @@ export const DUES_PROVIDERS: DuesProviderSpec[] = [
   {
     key: "etihad_we",
     name: "Etihad Water & Electricity",
-    blurb: "Current bill by account number. Payments: GCC cards, max AED 100,000, 5 tx/card/day.",
+    blurb: "Manual check — open the portal and look up the bill by account number. Payments: GCC cards, max AED 100,000, 5 tx/card/day.",
     paymentUrl:
       "https://online.etihadwe.ae/QuickBillPay/index.cfm?fuseaction=home.OUJBOEJEMTdFNURENTY3QzcyNDAyOEE1MDI5OTEzMTA1NUMzOEVCMzZBMjg2NkU3MkIxRjAyNEZGMjJDNjNDMQ==&z=1",
-    fields: [
-      { key: "account_number", label: "Account number", placeholder: "EtihadWE account number", required: true },
-      { key: "email", label: "Email (optional, for receipts)", placeholder: "name@company.ae", required: false },
-    ],
-    checkable: true,
+    fields: [],
+    checkable: false,
   },
   {
     key: "salik",
@@ -82,18 +79,18 @@ export const DUES_PROVIDERS: DuesProviderSpec[] = [
   {
     key: "du",
     name: "du — Quick Pay",
-    blurb: "Postpaid bill by mobile or account number, no login.",
+    blurb: "Manual check — open Quick Pay and look up the postpaid bill by mobile or account number.",
     paymentUrl: "https://myaccount.du.ae/webapp/en/quick-pay",
-    fields: [{ key: "account_number", label: "Mobile or account number", placeholder: "e.g. 0501234567", required: true }],
-    checkable: true,
+    fields: [],
+    checkable: false,
   },
   {
     key: "eand",
     name: "e& (Etisalat) — Quick Pay",
-    blurb: "Outstanding bill by account number. Note: bot-protected — needs a UAE-located server to check.",
+    blurb: "Manual check — open Quick Pay and look up the outstanding bill by account number.",
     paymentUrl: "https://www.eand.ae/ecare/c/quick-pay",
-    fields: [{ key: "account_number", label: "Account number", placeholder: "e& account number", required: true }],
-    checkable: true,
+    fields: [],
+    checkable: false,
   },
 ];
 

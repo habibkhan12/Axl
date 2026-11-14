@@ -152,8 +152,9 @@ export default function DuesPage() {
         const amount = r.outcome.amount_due ?? null;
         if (r.outcome.status === "ok" && amount != null) {
           const beforeAmt = before?.amount_due ?? null;
-          if (beforeAmt == null || beforeAmt === 0) appendNotif("dues", "New due detected — " + fmtAED(amount), who);
-          else if (beforeAmt !== amount) appendNotif("dues", "Due changed — " + fmtAED(beforeAmt) + " → " + fmtAED(amount), who);
+          const href = "/dues#dues-" + r.accountId;
+          if (beforeAmt == null || beforeAmt === 0) appendNotif("dues", "New due detected — " + fmtAED(amount), who, href);
+          else if (beforeAmt !== amount) appendNotif("dues", "Due changed — " + fmtAED(beforeAmt) + " → " + fmtAED(amount), who, href);
         }
       }
       setToast("Check complete — " + results.length + " account(s).");
@@ -346,7 +347,7 @@ export default function DuesPage() {
           <EmptyState
             icon={<Landmark size={20} />}
             title="No monitored accounts yet"
-            hint={editable ? "Add a Salik, Dubai Police, du, e&, EtihadWE or Ajman Sewerage account to start tracking fines and pending dues." : "Ask an admin to add monitored accounts."}
+            hint={editable ? "Add a Salik, Dubai Police or Ajman Sewerage account for live checks, or link any other portal for manual checks." : "Ask an admin to add monitored accounts."}
           />
           {editable ? (
             <div className="mt-4 flex justify-center">

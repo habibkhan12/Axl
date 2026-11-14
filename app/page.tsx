@@ -336,7 +336,7 @@ export default function DashboardPage() {
             <KpiCard
               title="Total income"
               icon={<ArrowDownLeft size={15} />}
-              value={fmtAED(totals.income, { compact: true })}
+              value={fmtAED(totals.income)}
               delta={pctDelta(totals.income, prevTotals.income)}
               vsLabel={VS_LABELS[preset]}
               spark={sparkOf("income")}
@@ -346,7 +346,7 @@ export default function DashboardPage() {
             <KpiCard
               title="Total spent"
               icon={<ArrowUpRight size={15} />}
-              value={fmtAED(totals.expense, { compact: true })}
+              value={fmtAED(totals.expense)}
               delta={pctDelta(totals.expense, prevTotals.expense)}
               vsLabel={VS_LABELS[preset]}
               invert
@@ -357,7 +357,7 @@ export default function DashboardPage() {
             <KpiCard
               title="Net profit"
               icon={<Scale size={15} />}
-              value={fmtAED(totals.net, { compact: true })}
+              value={fmtAED(totals.net)}
               delta={pctDelta(totals.net, prevTotals.net)}
               vsLabel={VS_LABELS[preset]}
               spark={sparkOf("profit")}
@@ -403,14 +403,14 @@ export default function DashboardPage() {
               }
             />
             <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-              <span className="text-[30px] font-bold leading-none tracking-tight tabular-nums text-zinc-900">{fmtAED(trendTotal, { compact: true })}</span>
+              <span className="text-[30px] font-bold leading-none tracking-tight tabular-nums text-zinc-900">{fmtAED(trendTotal)}</span>
               <DeltaPill value={trendDelta} suffix={VS_LABELS[preset]} invert={metric === "expense"} />
               {projEnd !== null && showProj ? (
                 <span className="text-[11px] font-medium text-amber-600" title={"Avg " + fmtAED(trendTotal / series.length) + "/day × " + periodDays + " days"}>
-                  → projected period-end {fmtAED(projEnd, { compact: true })}
+                  → projected period-end {fmtAED(projEnd)}
                 </span>
               ) : null}
-              <span className="text-[11px] text-zinc-400">avg {fmtAED(series.length ? trendTotal / series.length : 0, { compact: true })}/day</span>
+              <span className="text-[11px] text-zinc-400">avg {fmtAED(series.length ? trendTotal / series.length : 0)}/day</span>
             </div>
             <div className="mt-4 h-64 min-w-0 overflow-hidden">
               <TrendBars
@@ -435,20 +435,20 @@ export default function DashboardPage() {
               {proj.target > 0 ? (
                 <>
                   <div className="flex items-baseline gap-2">
-                    <span className="text-[24px] font-bold leading-none tracking-tight tabular-nums text-zinc-900">{fmtAED(proj.soFar, { compact: true })}</span>
-                    <span className="text-[11px] text-zinc-400">of {fmtAED(proj.target, { compact: true })}</span>
+                    <span className="text-[24px] font-bold leading-none tracking-tight tabular-nums text-zinc-900">{fmtAED(proj.soFar)}</span>
+                    <span className="text-[11px] text-zinc-400">of {fmtAED(proj.target)}</span>
                   </div>
                   <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-[#f1f1ef]">
                     <div className="h-full rounded-full transition-all" style={{ width: Math.max(2, Math.round(targetPct * 100)) + "%", background: proj.onTrack ? "#10b981" : "#f59e0b" }} />
                   </div>
                   <div className="mt-2.5 flex items-center justify-between text-[11px] text-zinc-500">
                     <span>
-                      Projected <span className="font-semibold text-zinc-900">{fmtAED(proj.projected, { compact: true })}</span>
+                      Projected <span className="font-semibold text-zinc-900">{fmtAED(proj.projected)}</span>
                     </span>
                     <span className="font-semibold tabular-nums text-zinc-700">{Math.round(targetPct * 100)}%</span>
                   </div>
                   <div className="mt-0.5 text-[11px] text-zinc-400">
-                    Needs {fmtAED(proj.neededPerDay, { compact: true })}/day · {proj.daysLeft} {proj.daysLeft === 1 ? "day" : "days"} left
+                    Needs {fmtAED(proj.neededPerDay)}/day · {proj.daysLeft} {proj.daysLeft === 1 ? "day" : "days"} left
                   </div>
                 </>
               ) : (

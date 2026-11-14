@@ -177,14 +177,14 @@ export default function FleetPage() {
         <StatCard
           title="Fuel & vehicle spend"
           icon={<Wallet size={15} />}
-          value={fmtAED(totalSpend, { compact: true })}
+          value={fmtAED(totalSpend)}
           sub={stats.length > 0 ? stats.length + " cars with entries" : "No entries yet"}
         />
         <StatCard
           title="Fuel volume"
           icon={<Fuel size={15} />}
           value={totalLiters > 0 ? Math.round(totalLiters).toLocaleString() + " L" : "—"}
-          sub={topSpender ? "Top: " + topSpender.vehicle.label + " · " + fmtAED(topSpender.total, { compact: true }) : "—"}
+          sub={topSpender ? "Top: " + topSpender.vehicle.label + " · " + fmtAED(topSpender.total) : "—"}
         />
         <StatCard
           title="Docs to renew"
@@ -273,7 +273,7 @@ export default function FleetPage() {
 
                       {/* Month spend */}
                       <span className="text-right">
-                        <span className="block text-[13px] font-bold tabular-nums text-zinc-900">{total > 0 ? fmtAED(total, { compact: true }) : "—"}</span>
+                        <span className="block text-[13px] font-bold tabular-nums text-zinc-900">{total > 0 ? fmtAED(total) : "—"}</span>
                         <span className="block text-[10px] text-zinc-400">{count} entr{count === 1 ? "y" : "ies"}</span>
                       </span>
 
@@ -539,7 +539,7 @@ function CarProfile({
         <div className="grid grid-cols-3 divide-x divide-[#f0ece4]">
           <div className="pr-4">
             <MicroLabel>Lifetime</MicroLabel>
-            <div className="mt-1 text-[18px] font-bold tabular-nums text-zinc-900">{fmtAED(lifetime, { compact: true })}</div>
+            <div className="mt-1 text-[18px] font-bold tabular-nums text-zinc-900">{fmtAED(lifetime)}</div>
           </div>
           <div className="px-4">
             <MicroLabel>Entries</MicroLabel>

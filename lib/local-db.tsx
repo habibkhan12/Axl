@@ -51,11 +51,20 @@ export function canEditPage(pathname: string, profile: Profile | null, role: Rol
   return tabAccessOf(profile, role, entry[0]) === "edit";
 }
 
+/** Result of the last cloud write, so the UI can show whether a save landed. */
+export interface SaveState {
+  saving: boolean;
+  error: string | null;
+  savedAt: number | null;
+}
+
 interface DbContextValue {
   db: Database | null;
   hydrated: boolean;
   authChecked: boolean;
   setDb: React.Dispatch<React.SetStateAction<Database | null>>;
+  saveState: SaveState;
+  retrySave: () => void;
   session: Session | null;
   profile: Profile | null;
   role: Role;
@@ -74,6 +83,8 @@ const DbContext = createContext<DbContextValue>({
   hydrated: false,
   authChecked: false,
   setDb: () => {},
+  saveState: { saving: false, error: null, savedAt: null },
+  retrySave: () => {},
   session: null,
   profile: null,
   role: "viewer",
@@ -106,6 +117,7 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
+  const [saveState, setSaveState] = useState<SaveState>({ saving: false, error: null, savedAt: null });
 
   // Auth session listener — hard-capped so the app can never hang on startup.
   useEffect(() => {
@@ -261,6 +273,13 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
     setDb(cloud);
   }
 
+  /** Re-send the diff for the current state — used by the "Not saved" banner. */
+  function retrySave() {
+    if (!session) return;
+    setSaveState((s) => ({ ...s, saving: true, error: null }));
+    setDb((prev) => (prev ? { ...prev } : prev));
+  }
+
   // "axl-profile-updated" — fired after the user changes their own name/avatar
   // in Settings so every open surface (sidebar, avatar menus) reloads instantly.
   useEffect(() => {
@@ -295,7 +314,7 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
     for (const t of db.transactions) {
       const prev = beforeTx.get(t.id);
       if (!prev) {
-        appendNotif("transaction", (t.kind === "income" ? "Income" : "Expense") + " added — " + (t.description || "entry"), who + " · AED " + t.amount.toFixed(2) + (t.txn_date ? " · " + t.txn_date : ""));
+        appendNotif("transaction", (t.kind === "income" ? "Income" : "Expense") + " added — " + (t.description || "entry"), who + " · AED " + t.amount.toFixed(2) + (t.txn_date ? " · " + t.txn_date : ""), "/transactions#txn-" + t.id);
       } else if (prev !== t && JSON.stringify(prev) !== JSON.stringify(t)) {
         const changes: string[] = [];
         if (prev.amount !== t.amount) changes.push("AED " + prev.amount.toFixed(2) + " → " + t.amount.toFixed(2));
@@ -303,11 +322,11 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
         if (prev.description !== t.description) changes.push("description");
         if (prev.category_id !== t.category_id) changes.push("category");
         if (!changes.length) changes.push("details");
-        appendNotif("transaction", "Entry edited — " + (t.description || prev.description || "entry"), who + " · " + changes.join(", "));
+        appendNotif("transaction", "Entry edited — " + (t.description || prev.description || "entry"), who + " · " + changes.join(", "), "/transactions#txn-" + t.id);
       }
     }
     for (const t of before.transactions) {
-      if (!afterTx.has(t.id)) appendNotif("transaction", "Entry deleted — " + (t.description || "entry"), who + " · AED " + t.amount.toFixed(2));
+      if (!afterTx.has(t.id)) appendNotif("transaction", "Entry deleted — " + (t.description || "entry"), who + " · AED " + t.amount.toFixed(2), "/transactions");
     }
 
     // reference data
@@ -322,15 +341,16 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
       const aMap = new Map(a.map((r) => [r.id, r] as const));
       for (const r of a) {
         const prev = bMap.get(r.id);
-        if (!prev) appendNotif("ref", label.charAt(0).toUpperCase() + label.slice(1) + " added — " + (r.name ?? r.label), who);
+        const refHref = label === "vehicle" ? "/fleet#car-" + r.id : "/settings";
+        if (!prev) appendNotif("ref", label.charAt(0).toUpperCase() + label.slice(1) + " added — " + (r.name ?? r.label), who, refHref);
         else if (JSON.stringify(prev) !== JSON.stringify(r)) {
           const name = r.name ?? r.label;
           const wasArchived = !prev.archived && !!r.archived;
           const wasRestored = !!prev.archived && !r.archived;
-          appendNotif("ref", wasArchived ? label.charAt(0).toUpperCase() + label.slice(1) + " archived — " + name : wasRestored ? label.charAt(0).toUpperCase() + label.slice(1) + " restored — " + name : label.charAt(0).toUpperCase() + label.slice(1) + " updated — " + name, who);
+          appendNotif("ref", wasArchived ? label.charAt(0).toUpperCase() + label.slice(1) + " archived — " + name : wasRestored ? label.charAt(0).toUpperCase() + label.slice(1) + " restored — " + name : label.charAt(0).toUpperCase() + label.slice(1) + " updated — " + name, who, refHref);
         }
       }
-      for (const r of b) if (!aMap.has(r.id)) appendNotif("ref", label.charAt(0).toUpperCase() + label.slice(1) + " deleted — " + (r.name ?? r.label), who);
+      for (const r of b) if (!aMap.has(r.id)) appendNotif("ref", label.charAt(0).toUpperCase() + label.slice(1) + " deleted — " + (r.name ?? r.label), who, label === "vehicle" ? "/fleet" : "/settings");
     }
 
     // settings
@@ -339,7 +359,7 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
       before.settings.monthly_profit_target !== db.settings.monthly_profit_target ||
       before.settings.monthly_expense_target !== db.settings.monthly_expense_target
     ) {
-      appendNotif("settings", "Monthly target updated", who + " · AED " + before.settings.monthly_income_target + " → " + db.settings.monthly_income_target);
+      appendNotif("settings", "Monthly target updated", who + " · AED " + before.settings.monthly_income_target + " → " + db.settings.monthly_income_target, "/settings");
     }
   }, [db, hydrated, profile?.name]);
 
@@ -366,8 +386,14 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     syncingRef.current = true;
+    setSaveState((s) => ({ ...s, saving: true }));
     void (async () => {
       const sb = getSupabase();
+      // Supabase returns errors instead of throwing — every write below is
+      // checked so a rejected save can never look like a successful one.
+      const check = (label: string, error: { message?: string } | null) => {
+        if (error) throw new Error(label + " — " + (error.message ?? "write failed"));
+      };
       try {
         // --- transactions: inserts, deletes, updates ---
         const beforeTx = new Map(before.transactions.map((t) => [t.id, t]));
@@ -378,8 +404,14 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
           const prev = beforeTx.get(t.id);
           return prev && prev !== t && JSON.stringify(prev) !== JSON.stringify(t);
         });
-        if (inserted.length) await sb.from("transactions").insert(inserted);
-        if (deleted.length) await sb.from("transactions").delete().in("id", deleted.map((t) => t.id));
+        if (inserted.length) {
+          const { error } = await sb.from("transactions").insert(inserted);
+          check("Could not save the new entry", error);
+        }
+        if (deleted.length) {
+          const { error } = await sb.from("transactions").delete().in("id", deleted.map((t) => t.id));
+          check("Could not delete the entry", error);
+        }
         for (const t of updated) {
           // Field-level patch: push only the fields that actually changed so a
           // stale snapshot can never overwrite a teammate's concurrent edits
@@ -391,7 +423,8 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
             if (JSON.stringify(prev[key]) !== JSON.stringify(t[key])) patch[key] = t[key];
           }
           patch.updated_at = new Date().toISOString();
-          await sb.from("transactions").update(patch).eq("id", t.id);
+          const { error } = await sb.from("transactions").update(patch).eq("id", t.id);
+          check("Could not update the entry", error);
         }
 
         // --- reference tables: upserts and deletes by id ---
@@ -408,20 +441,31 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
             return !prev || JSON.stringify(prev) !== JSON.stringify(r);
           });
           const dels = b.filter((r) => !afterMap.has(r.id));
-          if (ups.length) await sb.from(table).upsert(ups, { onConflict: "id" });
-          if (dels.length) await sb.from(table).delete().in("id", dels.map((r) => r.id));
+          if (ups.length) {
+            const { error } = await sb.from(table).upsert(ups, { onConflict: "id" });
+            check("Could not save " + table.replace("_", " "), error);
+          }
+          if (dels.length) {
+            const { error } = await sb.from(table).delete().in("id", dels.map((r) => r.id));
+            check("Could not delete from " + table.replace("_", " "), error);
+          }
         }
 
         // --- settings ---
         if (JSON.stringify(before.settings) !== JSON.stringify(db.settings)) {
-          await updateSettings(db.settings);
+          const settingsErr = await updateSettings(db.settings);
+          check("Could not save settings", settingsErr ? { message: settingsErr } : null);
         }
 
         snapshotRef.current = db;
+        setSaveState({ saving: false, error: null, savedAt: Date.now() });
       } catch (e) {
-        // On failure keep the snapshot so the next change retries the same diff.
-        console.error("Cloud sync failed:", e);
-        appendNotif("sync", "Cloud sync failed — will retry on next change", e instanceof Error ? e.message : "network error");
+        // On failure keep the edit and the snapshot so the retry sends the same
+        // diff — but say so loudly instead of reporting a save that never happened.
+        const message = e instanceof Error ? e.message : "network error";
+        console.error("Cloud save failed:", e);
+        setSaveState((s) => ({ ...s, saving: false, error: message }));
+        appendNotif("sync", "Save failed — retrying", message);
         // Retry shortly so offline-then-online recovers without a new edit.
         setTimeout(() => setDb((prev) => (prev ? { ...prev } : prev)), 8000);
       } finally {
@@ -448,6 +492,8 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
       hydrated,
       authChecked,
       setDb,
+      saveState,
+      retrySave,
       session,
       profile,
       role,
@@ -461,7 +507,7 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
       refresh,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [db, hydrated, authChecked, session, profile, role]
+    [db, hydrated, authChecked, session, profile, role, saveState]
   );
 
   return <DbContext.Provider value={value}>{children}</DbContext.Provider>;

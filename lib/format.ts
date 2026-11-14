@@ -1,9 +1,7 @@
 // ─── Formatting helpers ──────────────────────────────────────────────────────
 
-export function fmtAED(n: number, opts?: { compact?: boolean; decimals?: number }): string {
-  if (opts?.compact && Math.abs(n) >= 1000) {
-    return `AED ${Intl.NumberFormat("en-AE", { notation: "compact", maximumFractionDigits: 1 }).format(n)}`;
-  }
+export function fmtAED(n: number, opts?: { decimals?: number }): string {
+  // Accounting app: never abbreviate. Always render the exact amount.
   return `AED ${Intl.NumberFormat("en-AE", {
     minimumFractionDigits: opts?.decimals ?? 2,
     maximumFractionDigits: opts?.decimals ?? 2,

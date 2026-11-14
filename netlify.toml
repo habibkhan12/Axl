@@ -10,21 +10,21 @@
   # The Supabase project URL and anon/publishable key are meant to be public:
   # Next.js inlines NEXT_PUBLIC_* values into the bundles, so exclude them from
   # secrets scanning.
-  # Real secrets (service role key, CRON_SECRET) are still scanned.
+  # Real secrets (the service role key) are still scanned.
   # SECRETS_SCAN_OMIT_KEYS lists itself too, otherwise its own value (the
   # variable name above) is flagged wherever process.env references it.
   SECRETS_SCAN_OMIT_KEYS = "NEXT_PUBLIC_SUPABASE_ANON_KEY,NEXT_PUBLIC_SUPABASE_URL,SECRETS_SCAN_OMIT_KEYS"
   # Netlify's Next runtime builds the app and wires up functions/edge —
   # it is enabled by default when netlify.toml exists; nothing else to set here.
 
-# The dues sweep is NOT run from the in-process scheduler on Netlify (functions
-# are ephemeral and the captcha browser worker needs a desktop host).
-# A GitHub Actions cron (.github/workflows/dues-cron.yml) calls
-# POST /api/dues/check with the CRON_SECRET instead — see that file.
+# Dues checks are NOT automated on Netlify: functions are ephemeral and the
+# live checkers (Salik, Dubai Police, Ajman Sewerage) need a desktop host with
+# Chrome + ffmpeg. Here they report "manual"; the other portals are manual
+# link-outs everywhere.
 
 # All secrets (NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY,
-# SUPABASE_SERVICE_ROLE_KEY, CRON_SECRET, optional DUES_WORKER_URL) are set in
-# Site configuration → Environment variables — never in this file.
+# SUPABASE_SERVICE_ROLE_KEY) are set in Site configuration → Environment
+# variables — never in this file.
 
 [[headers]]
   for = "/*"
