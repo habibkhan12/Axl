@@ -10,6 +10,8 @@ export interface NotifEvent {
   text: string;
   detail?: string;
   read: boolean;
+  /** Where clicking the notification takes you (e.g. "/transactions#txn-t_ab12"). */
+  href?: string;
 }
 
 const KEY = "axl-notifs-v1";
@@ -81,13 +83,48 @@ function persist(events: NotifEvent[]) {
   }
 }
 
-export function appendNotif(kind: NotifKind, text: string, detail?: string) {
+export function appendNotif(kind: NotifKind, text: string, detail?: string, href?: string) {
   const prefs = loadNotifPrefs();
   if (prefs[kind] === false) return; // muted category — don't even record
   const events = loadNotifs();
-  events.unshift({ id: "n_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), at: new Date().toISOString(), kind, text, detail, read: false });
+  events.unshift({ id: "n_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), at: new Date().toISOString(), kind, text, detail, read: false, href });
   persist(events);
   window.dispatchEvent(new CustomEvent("axl-notifs-changed"));
+}
+
+/** Mark a single notification as read. Returns true when something changed. */
+export function markRead(id: string): boolean {
+  let changed = false;
+  const next = loadNotifs().map((n) => {
+    if (n.id !== id || n.read) return n;
+    changed = true;
+    return { ...n, read: true };
+  });
+  if (!changed) return false;
+  persist(next);
+  window.dispatchEvent(new CustomEvent("axl-notifs-changed"));
+  return true;
+}
+
+/**
+ * The page a notification belongs to. New events carry an exact href (entry,
+ * car, dues account); older ones fall back to the right tab.
+ */
+export function notifTarget(n: NotifEvent): string | null {
+  if (n.href) return n.href;
+  switch (n.kind) {
+    case "transaction":
+      return "/transactions";
+    case "dues":
+      return "/dues";
+    case "ref":
+      return /^Vehicle\b/i.test(n.text) ? "/fleet" : "/settings";
+    case "account":
+    case "settings":
+      return "/settings";
+    default:
+      return null;
+  }
 }
 
 export function markAllRead() {

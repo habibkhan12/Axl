@@ -1,7 +1,7 @@
 "use client";
 import React, { useEffect, useMemo, useState } from "react";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, Bar, ReferenceLine, ComposedChart, Line } from "recharts";
-import { fmtAED, fmtWeekday, todayISO } from "@/lib/format";
+import { fmtAED, fmtNum, fmtWeekday, todayISO } from "@/lib/format";
 import type { DayPoint } from "@/lib/analytics";
 
 /* ───────────────────────── TrendBars — Kravio bar chart ──────────────────── */
@@ -113,12 +113,12 @@ export function TrendBars({
         <YAxis
           yAxisId="daily"
           orientation="right"
-          width={46}
+          width={72}
           domain={[minV < 0 ? Math.floor(minV * 1.15) : 0, Math.ceil(maxV * 1.15) || 1]}
           tick={{ fontSize: 11, fill: "#a1a1aa" }}
           axisLine={false}
           tickLine={false}
-          tickFormatter={(v: number) => (Math.abs(v) >= 1000 ? (v / 1000).toFixed(Math.abs(v) >= 10000 ? 0 : 1) + "k" : String(v))}
+          tickFormatter={(v: number) => fmtNum(v)}
         />
         {showTarget ? <YAxis yAxisId="cum" hide domain={[0, Math.ceil(cumMax * 1.08) || 1]} /> : null}
         <Bar yAxisId="daily" dataKey="value" radius={[5, 5, 2, 2]} maxBarSize={40}>
@@ -165,8 +165,8 @@ function TrendTip(props: { active?: boolean; showCum?: boolean; payload?: { payl
       {head}
       {props.showCum && (p.cum != null || p.pace != null || p.proj != null) ? (
         <div className="font-normal text-zinc-300">
-          {p.cum != null ? "to date " + fmtAED(p.cum, { compact: true }) : p.proj != null ? "projected " + fmtAED(p.proj, { compact: true }) : "projected " + fmtAED(p.pace ?? 0, { compact: true })}
-          {p.pace != null ? " · target " + fmtAED(p.pace, { compact: true }) : ""}
+          {p.cum != null ? "to date " + fmtAED(p.cum) : p.proj != null ? "projected " + fmtAED(p.proj) : "projected " + fmtAED(p.pace ?? 0)}
+          {p.pace != null ? " · target " + fmtAED(p.pace) : ""}
         </div>
       ) : null}
     </div>

@@ -4,9 +4,9 @@
  * then every 6 hours. The checker itself lives in lib/dues-checkers.ts.
  *
  * On serverless hosts (Netlify/Vercel) this scheduler is DISABLED: functions
- * are ephemeral, so setInterval dies with the instance. The sweep runs from
- * GitHub Actions cron instead (.github/workflows/dues-cron.yml), which calls
- * POST /api/dues/check with the CRON_SECRET on the deployed site.
+ * are ephemeral, so setInterval dies with the instance. There, the live Salik /
+ * Dubai Police / Ajman Sewerage checks report "manual" and the Dues page's
+ * Check button is the only way to run a sweep.
  */
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
@@ -15,7 +15,7 @@ export async function register() {
     process.env.VERCEL ||
     process.env.AWS_LAMBDA_FUNCTION_NAME
   ) {
-    console.log("[dues-scheduler] serverless host detected — scheduled sweeps run from cloud cron (GitHub Actions), not in-process.");
+    console.log("[dues-scheduler] serverless host detected — automated sweeps need a desktop host; use the Dues page Check button here.");
     return;
   }
   const g = globalThis as { __axlDuesScheduler?: boolean };

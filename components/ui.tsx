@@ -318,8 +318,11 @@ export function SlideOver({
           </button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto app-scroll">{children}</div>
+        {/* Extra bottom padding: on Netlify the "Powered by Netlify" badge is pinned
+            to the viewport's bottom-right and otherwise swallows clicks on the
+            primary action (e.g. "Save changes"). */}
         {footer ? (
-          <div className="flex shrink-0 items-center justify-end gap-2 border-t border-[#f0ece4] bg-white px-5 py-3">{footer}</div>
+          <div className="flex shrink-0 items-center justify-end gap-2 border-t border-[#f0ece4] bg-white px-5 pb-16 pt-3">{footer}</div>
         ) : null}
       </aside>
     </div>

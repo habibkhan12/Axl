@@ -52,6 +52,18 @@ create table if not exists public.vehicles (
   archived boolean not null default false
 );
 
+-- Extended vehicle registry (matches lib/types.ts Vehicle). The app writes
+-- these columns, so a database without them rejects every car save.
+alter table public.vehicles
+  add column if not exists tc_number text,
+  add column if not exists owner_name text,
+  add column if not exists license_expiry date,
+  add column if not exists insurance_expiry date,
+  add column if not exists salik_mobile text,
+  add column if not exists salik_account text,
+  add column if not exists salik_tag text,
+  add column if not exists salik_code text;
+
 create table if not exists public.payment_methods (
   id text primary key,
   name text not null,

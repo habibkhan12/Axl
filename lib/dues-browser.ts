@@ -28,25 +28,8 @@ export type Scraped = { amount_due: number | null; message: string; extra?: Reco
  * The captcha worker needs patchright + a real headed Chrome + ffmpeg — a
  * desktop-server capability. On serverless hosts (Netlify/Vercel Lambdas)
  * there is no display and no bundled Chrome, so every browser check reports
- * "manual" instead of crashing. HTTP-only checkers (Etihad WE, du, e&) are
- * unaffected. Point DUES_WORKER_URL at a always-on machine (e.g. the office
- * PC or a small VPS) running `node scripts/dues-captcha-worker-server.mjs`
- * to get live browser-based checks back on serverless.
+ * "manual" instead of crashing.
  */
-const REMOTE_WORKER_URL = process.env.DUES_WORKER_URL ?? "";
-
-async function callRemoteWorker<T>(op: string, args: Record<string, unknown>): Promise<T> {
-  const res = await fetch(REMOTE_WORKER_URL, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ op, ...args }),
-    signal: AbortSignal.timeout(240_000),
-  });
-  const json = (await res.json().catch(() => null)) as { ok?: boolean; data?: T; error?: string } | null;
-  if (!res.ok || !json?.ok) throw new Error(json?.error || "remote captcha worker failed (HTTP " + res.status + ")");
-  return json.data as T;
-}
-
 function isServerless(): boolean {
   return !!(
     process.env.NETLIFY ||
@@ -56,17 +39,14 @@ function isServerless(): boolean {
 }
 
 /**
- * Browser ops route to the remote worker when DUES_WORKER_URL is set, else to
- * the local patchright worker (desktop servers only). On serverless with no
- * remote worker we throw — callers in dues-checkers.ts catch this and fall
- * back to the reachability probe (status "manual"), so the pipeline never
- * crashes just because it's hosted on a function platform.
+ * Browser ops go to the local patchright worker (desktop servers only). On
+ * serverless we throw the marker — callers in dues-checkers.ts catch it and
+ * report status "manual" instead of crashing.
  */
 async function browserCheck<T>(
   op: string,
   args: Record<string, unknown>
 ): Promise<T> {
-  if (REMOTE_WORKER_URL) return callRemoteWorker<T>(op, args);
   if (isServerless()) throw new Error("__SERVERLESS_NO_BROWSER__");
   return withRetry(() => callWorker<T>(op, args));
 }
@@ -188,8 +168,4 @@ export async function salikBalance(fields: Record<string, string>): Promise<Scra
 export async function dubaiPoliceFines(fields: Record<string, string>): Promise<Scraped> {
   const out = await browserCheck<{ amount_due: number; message: string; extra?: Record<string, unknown> }>("dubai-fines", fields);
   return { amount_due: Number(out.amount_due), message: String(out.message), extra: out.extra };
-}
-
-export function stopDuesWorker() {
-  killWorker();
 }

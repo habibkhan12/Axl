@@ -8,12 +8,27 @@ import { DbProvider, useDbContext, canViewPage } from "@/lib/local-db";
 import { activeUser } from "@/lib/repo";
 import { AuthGate } from "@/components/auth-gate";
 import { Avatar, useKeyboardShortcut } from "@/components/ui";
-import { loadNotifs, markAllRead, type NotifEvent } from "@/lib/notifications";
+import { loadNotifs, markAllRead, markRead, notifTarget, type NotifEvent } from "@/lib/notifications";
 
 function NotificationBell() {
   const [events, setEvents] = useState<NotifEvent[]>([]);
   const [open, setOpen] = useState(false);
   const ref = React.useRef<HTMLDivElement>(null);
+  const router = useRouter();
+  const pathname = usePathname();
+
+  // Clicking a notification marks just that one read and jumps to the record it
+  // refers to (a specific entry, car or dues account).
+  function openNotif(n: NotifEvent) {
+    markRead(n.id);
+    setOpen(false);
+    const target = notifTarget(n);
+    if (!target) return;
+    const [path, hash] = target.split("#");
+    // Same-page deep links need a real hashchange so the page re-runs its handler.
+    if (hash && path === pathname) window.location.hash = hash;
+    else router.push(target);
+  }
 
   useEffect(() => {
     const update = () => setEvents(loadNotifs());
@@ -60,14 +75,20 @@ function NotificationBell() {
               <p className="px-4 py-8 text-center text-xs text-zinc-400">No activity yet. Changes you make will appear here.</p>
             ) : (
               events.slice(0, 50).map((n) => (
-                <div key={n.id} className={"flex gap-2.5 border-b border-[#f5f1e9] px-4 py-2.5 last:border-0 " + (n.read ? "" : "bg-[#faf7f1]")}>
+                <button
+                  key={n.id}
+                  type="button"
+                  onClick={() => openNotif(n)}
+                  title={notifTarget(n) ? "Open" : undefined}
+                  className={"flex w-full gap-2.5 border-b border-[#f5f1e9] px-4 py-2.5 text-left transition-colors last:border-0 hover:bg-[#f4f1ea] " + (n.read ? "" : "bg-[#faf7f1]")}
+                >
                   <span className={"mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full " + (n.read ? "bg-transparent" : "bg-zinc-900")} />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[12px] font-medium leading-snug text-zinc-800">{n.text}</p>
-                    {n.detail ? <p className="mt-0.5 truncate text-[11px] text-zinc-400">{n.detail}</p> : null}
-                  </div>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[12px] font-medium leading-snug text-zinc-800">{n.text}</span>
+                    {n.detail ? <span className="mt-0.5 block truncate text-[11px] text-zinc-400">{n.detail}</span> : null}
+                  </span>
                   <span className="shrink-0 text-[10px] tabular-nums text-zinc-300">{new Date(n.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
-                </div>
+                </button>
               ))
             )}
           </div>
@@ -94,6 +115,34 @@ const PAGE_LABELS: Record<string, string> = {
   "/dues": "Dues & fines",
   "/settings": "Settings",
 };
+
+/** Sidebar status line: proves whether the last edit actually reached Supabase. */
+function SaveStatus() {
+  const { session, saveState, retrySave } = useDbContext();
+  if (!session) return null;
+  const { saving, error, savedAt } = saveState;
+  if (error) {
+    return (
+      <div className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-2">
+        <div className="text-[11px] font-semibold text-red-700">Not saved</div>
+        <div className="mt-0.5 line-clamp-2 text-[10px] leading-snug text-red-600/80" title={error}>
+          {error}
+        </div>
+        <button onClick={retrySave} className="mt-1 text-[11px] font-semibold text-red-700 underline underline-offset-2">
+          Retry now
+        </button>
+      </div>
+    );
+  }
+  if (saving) {
+    return <div className="px-2 text-[10px] font-medium text-zinc-400">Saving…</div>;
+  }
+  return (
+    <div className="px-2 text-[10px] font-medium text-emerald-600">
+      {savedAt ? "All changes saved" : "Cloud sync on"}
+    </div>
+  );
+}
 
 interface QuickEntryContextValue {
   openQuickEntry: (kind?: Kind) => void;
@@ -266,6 +315,7 @@ function Shell({ children }: { children: React.ReactNode }) {
 
               {/* Bottom */}
               <div className={(collapsed ? "space-y-2 px-2" : "space-y-2 px-3") + " border-t-0 py-3"}>
+                {!collapsed ? <SaveStatus /> : null}
                 {canEdit("/transactions") ? (
                   collapsed ? (
                     <button

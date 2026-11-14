@@ -1,16 +1,20 @@
 import "server-only";
 import { salikBalance, dubaiPoliceFines, ajmanSewerageDue } from "./dues-browser";
+import { duesProviderOf } from "./dues-providers";
 
 /**
  * SERVER-ONLY. Dues checker + sequencer.
  *
- * v1 contract per portal: we probe the portal over plain HTTP. Where the
- * portal exposes a captcha-free data endpoint we read live amounts (status
- * "ok"); where it is gated behind reCAPTCHA / WAF the check returns status
- * "manual" (portal reachable, human verification needed) and the dashboard
- * keeps showing the payment link. This keeps the pipeline, history and
- * notifications real today, while Phase 2 (headless browser) upgrades
- * individual checkers to live amounts without any UI/data-model change.
+ * Only portals whose automated lookup is proven live are checked here — all
+ * three drive a real Chrome through the captcha worker
+ * (scripts/dues-captcha-worker.mjs):
+ *
+ *   salik            — guest plate + mobile balance
+ *   dubai_police     — fines by traffic code (TC) number
+ *   ajman_sewerage   — balance by 10-digit account number
+ *
+ * Every other portal (EVG, Etihad WE, du, e&) is link-only: the check records a
+ * "manual" status and the dashboard keeps showing the payment link.
  */
 
 export type DuesCheckOutcome = {
@@ -20,108 +24,68 @@ export type DuesCheckOutcome = {
   extra?: Record<string, unknown>;
 };
 
-const UA =
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
-
-async function probe(url: string): Promise<{ reachable: boolean; httpStatus: number; blocked: boolean }> {
-  try {
-    const res = await fetch(url, {
-      method: "GET",
-      headers: { "User-Agent": UA, Accept: "text/html,application/xhtml+xml" },
-      signal: AbortSignal.timeout(15_000),
-      redirect: "follow",
-    });
-    const body = res.url.includes("quick-pay") || url.includes("eand") ? await res.text().catch(() => "") : "";
-    const blocked = /request rejected|access denied|captcha-required/i.test(body);
-    return { reachable: res.ok, httpStatus: res.status, blocked };
-  } catch {
-    return { reachable: false, httpStatus: 0, blocked: false };
-  }
-}
-
-/** Reachability probe + honest status. Phase 2 swaps bodies for live scraping. */
-async function reachabilityCheck(name: string, url: string): Promise<DuesCheckOutcome> {
-  const { reachable, httpStatus, blocked } = await probe(url);
-  if (!reachable) {
-    return { status: "error", message: `${name}: portal unreachable (HTTP ${httpStatus || "network error"}) from the server.` };
-  }
-  if (blocked) {
-    return { status: "manual", message: `${name}: portal reachable but bot-shielded — open the payment link to check this account.` };
-  }
-  return {
-    status: "manual",
-    message: `${name}: portal reachable; live amount needs human verification (portal captcha) — use the payment link. Phase 2 automates this.`,
-  };
-}
-
 type Checker = (fields: Record<string, string>) => Promise<DuesCheckOutcome>;
 
 /**
  * When a browser-based checker reports the serverless marker (no patchright/
- * Chrome on this host), swap it for the plain reachability probe with a clean
- * "manual" status instead of leaking the internal marker text.
+ * Chrome on this host), report a clean "manual" status instead of leaking the
+ * internal marker text.
  */
 function isNoBrowserMarker(reason: string): boolean {
   return reason.includes("__SERVERLESS_NO_BROWSER__");
 }
 
+function manualCheck(name: string, reason: string): DuesCheckOutcome {
+  if (isNoBrowserMarker(reason)) {
+    return {
+      status: "manual",
+      message: `${name}: live checks run on the desktop/server host — open the payment link to check this account here.`,
+    };
+  }
+  return { status: "error", message: `${name}: ${reason}` };
+}
+
 const CHECKERS: Record<string, Checker> = {
-  evg: async () => ({
-    status: "manual",
-    message: "EVG needs a login — link-only. Pursue an EVG Organization (fleet) account for fleet-wide fines.",
-  }),
   dubai_police: async (f) => {
+    const name = "Dubai Police";
     try {
       const r = await dubaiPoliceFines(f);
       return { status: "ok", amount_due: r.amount_due, message: r.message, extra: r.extra };
     } catch (e) {
-      const reason = e instanceof Error ? e.message : String(e);
-      if (isNoBrowserMarker(reason))
-        return { status: "manual", message: "Dubai Police: automated checking runs on the scheduled worker host — check manually here meanwhile." };
-      const probe = await reachabilityCheck("Dubai Police", "https://www.dubaipolice.gov.ae/app/services/fine-payment/search");
-      return { ...probe, message: reason + " — " + probe.message };
+      return manualCheck(name, e instanceof Error ? e.message : String(e));
     }
   },
   ajman_sewerage: async (f) => {
-    // LIVE: captcha worker solves reCAPTCHA (auto-pass or audio→Google STT) and
-    // drives the SPA's own form. Verified live Oct 2026.
+    const name = "Ajman Sewerage";
     try {
       const r = await ajmanSewerageDue(f);
       return { status: "ok", amount_due: r.amount_due, message: r.message, extra: r.extra };
     } catch (e) {
-      const reason = e instanceof Error ? e.message : String(e);
-      if (isNoBrowserMarker(reason))
-        return { status: "manual", message: "Ajman Sewerage: automated checking runs on the scheduled worker host — check manually here meanwhile." };
-      const probe = await reachabilityCheck("Ajman Sewerage", "https://www.ajmansewerage.ae/quickpay");
-      return { ...probe, message: reason + " — " + probe.message };
+      return manualCheck(name, e instanceof Error ? e.message : String(e));
     }
   },
-  etihad_we: () =>
-    reachabilityCheck(
-      "Etihad WE",
-      "https://online.etihadwe.ae/QuickBillPay/index.cfm?fuseaction=home.OUJBOEJEMTdFNURENTY3QzcyNDAyOEE1MDI5OTEzMTA1NUMzOEVCMzZBMjg2NkU3MkIxRjAyNEZGMjJDNjNDMQ==&z=1"
-    ),
   salik: async (f) => {
-    // Live first (headless browser — verified working), fall back to probe status.
+    const name = "Salik";
     try {
       const r = await salikBalance(f);
       return { status: "ok", amount_due: r.amount_due, message: r.message, extra: r.extra };
     } catch (e) {
-      const reason = e instanceof Error ? e.message : String(e);
-      if (isNoBrowserMarker(reason))
-        return { status: "manual", message: "Salik: automated checking runs on the scheduled worker host — check manually here meanwhile." };
-      const probe = await reachabilityCheck("Salik", "https://www.salik.ae/en/support/salik-services-catalog/recharge-a-salik-account");
-      return { ...probe, message: reason + " — " + probe.message };
+      return manualCheck(name, e instanceof Error ? e.message : String(e));
     }
   },
-  du: () => reachabilityCheck("du", "https://myaccount.du.ae/webapp/en/quick-pay"),
-  eand: () => reachabilityCheck("e&", "https://www.eand.ae/ecare/c/quick-pay"),
 };
 
 export function runDuesCheck(providerKey: string, fields: Record<string, string>): Promise<DuesCheckOutcome> {
-  const checker = CHECKERS[providerKey];
-  if (!checker) {
+  const provider = duesProviderOf(providerKey);
+  if (!provider) {
     return Promise.resolve({ status: "error", message: `Unknown provider "${providerKey}".` });
+  }
+  const checker = provider.checkable ? CHECKERS[providerKey] : undefined;
+  if (!checker) {
+    return Promise.resolve({
+      status: "manual",
+      message: `${provider.name}: manual check — open the payment link to see the amount.`,
+    });
   }
   return checker(fields).catch((e: unknown) => ({
     status: "error" as const,

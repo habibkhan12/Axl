@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from "react";
 import { useDbContext } from "@/lib/local-db";
 import { ADMIN_EMAIL } from "@/lib/admin";
+import { SUPABASE_READY } from "@/lib/supabase";
 import { Button, Input, Label, CARD } from "@/components/ui";
 
 /**
@@ -14,6 +15,8 @@ import { Button, Input, Label, CARD } from "@/components/ui";
  */
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const { session, authChecked, signIn } = useDbContext();
+  // Local mode (no Supabase project configured): skip login entirely and run on
+  // the seeded localStorage database.
   const [mode, setMode] = useState<"signin" | "first-admin">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -66,6 +69,8 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       setBusy(false);
     }
   }
+
+  if (!SUPABASE_READY) return <>{children}</>;
 
   if (!authChecked) {
     return <div className="flex min-h-screen items-center justify-center bg-[#f4efe8] text-sm text-zinc-400">Loading…</div>;

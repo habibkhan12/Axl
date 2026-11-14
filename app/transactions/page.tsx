@@ -25,7 +25,7 @@ import {
   StatCard,
 } from "@/components/ui";
 import { PageHeader, useQuickEntry } from "@/components/app-shell";
-import { MonthPicker } from "@/components/date-picker";
+import { CalendarPicker } from "@/components/date-picker";
 
 type SortKey = "date" | "amount";
 
@@ -39,6 +39,8 @@ export default function TransactionsPage() {
 
   const [kind, setKind] = useState<"all" | Kind>("all");
   const [ym, setYm] = useState(nowYm);
+  // Optional single-day drill-down from the calendar (null = whole month).
+  const [day, setDay] = useState<string | null>(null);
   const [categoryId, setCategoryId] = useState("");
   const [methodId, setMethodId] = useState("");
   const [q, setQ] = useState("");
@@ -49,8 +51,8 @@ export default function TransactionsPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [flashId, setFlashId] = useState<string | null>(null);
 
-  const from = monthBounds(ym).from;
-  const to = monthBounds(ym).to;
+  const from = day ?? monthBounds(ym).from;
+  const to = day ?? monthBounds(ym).to;
 
   const nameOf = {
     category: (id: string | null | undefined) => db.categories.find((c) => c.id === id)?.name ?? "—",
@@ -99,6 +101,7 @@ export default function TransactionsPage() {
       const tx = db.transactions.find((x) => x.id === id);
       if (!tx) return;
       setYm(tx.txn_date.slice(0, 7));
+      setDay(null);
       setKind("all");
       setCategoryId("");
       setMethodId("");
@@ -153,10 +156,11 @@ export default function TransactionsPage() {
     setSelected((prev) => (prev.size === rows.length ? new Set() : new Set(rows.map((t) => t.id))));
   }
 
-  const filtersActive = ym !== nowYm || kind !== "all" || categoryId !== "" || methodId !== "" || q.trim() !== "";
+  const filtersActive = ym !== nowYm || day !== null || kind !== "all" || categoryId !== "" || methodId !== "" || q.trim() !== "";
 
   function clearFilters() {
     setYm(nowYm);
+    setDay(null);
     setKind("all");
     setCategoryId("");
     setMethodId("");
@@ -167,7 +171,7 @@ export default function TransactionsPage() {
     <div>
       <PageHeader
         title="Transactions"
-        subtitle={rows.length + " " + (rows.length === 1 ? "entry" : "entries") + " · " + monthLabel(ym) + " · in " + fmtAED(totals.income, { compact: true }) + " · out " + fmtAED(totals.expense, { compact: true })}
+        subtitle={rows.length + " " + (rows.length === 1 ? "entry" : "entries") + " · " + (day ? fmtDate(day) : monthLabel(ym)) + " · in " + fmtAED(totals.income) + " · out " + fmtAED(totals.expense)}
         actions={
           <>
             <Button onClick={exportCsv}>
@@ -187,32 +191,41 @@ export default function TransactionsPage() {
         <StatCard
           title="Money in"
           icon={<ArrowDownLeft size={15} />}
-          value={fmtAED(totals.income, { compact: true })}
+          value={fmtAED(totals.income)}
           sub={rows.filter((t) => t.kind === "income").length + " income " + (rows.filter((t) => t.kind === "income").length === 1 ? "entry" : "entries")}
           tone={totals.income > 0 ? "ok" : "plain"}
         />
         <StatCard
           title="Money out"
           icon={<ArrowUpRight size={15} />}
-          value={fmtAED(totals.expense, { compact: true })}
+          value={fmtAED(totals.expense)}
           sub={rows.filter((t) => t.kind === "expense").length + " expense " + (rows.filter((t) => t.kind === "expense").length === 1 ? "entry" : "entries")}
           tone={totals.expense > 0 ? "bad" : "plain"}
         />
         <StatCard
           title="Net"
           icon={<Scale size={15} />}
-          value={fmtAED(totals.net, { compact: true })}
-          sub={"Net for " + monthLabel(ym)}
+          value={fmtAED(totals.net)}
+          sub={"Net for " + (day ? fmtDate(day) : monthLabel(ym))}
           tone={totals.net >= 0 ? "ok" : "bad"}
         />
-        <StatCard title="Entries" icon={<Receipt size={15} />} value={String(rows.length)} sub={monthLabel(ym)} />
+        <StatCard title="Entries" icon={<Receipt size={15} />} value={String(rows.length)} sub={day ? fmtDate(day) : monthLabel(ym)} />
       </div>
 
       <Card className="overflow-hidden">
         {/* Toolbar: tinted Kravio card strip */}
         <div className="flex flex-wrap items-center gap-2 border-b border-[#f0ece4] bg-[#faf8f4] px-4 py-2.5">
-          <div className="w-full sm:w-40">
-            <MonthPicker value={ym} onChange={setYm} />
+          <div className="w-full sm:w-44">
+            <CalendarPicker
+              value={day ?? ym + "-01"}
+              label={day ? fmtDate(day) : monthLabel(ym)}
+              isMonth={day === null}
+              onChange={(iso) => {
+                setYm(iso.slice(0, 7));
+                setDay(iso);
+              }}
+              onWholeMonth={() => setDay(null)}
+            />
           </div>
           <div className="w-full sm:w-44">
             <SelectMenu
@@ -258,8 +271,10 @@ export default function TransactionsPage() {
 
         {filtersActive ? (
           <div className="flex flex-wrap items-center gap-1.5 border-b border-[#efefec] px-4 py-2 sm:px-5">
-            {ym !== nowYm ? (
-              <FilterChip label={ym} onClear={() => setYm(nowYm)} />
+            {day ? (
+              <FilterChip label={fmtDate(day)} onClear={() => setDay(null)} />
+            ) : ym !== nowYm ? (
+              <FilterChip label={monthLabel(ym)} onClear={() => setYm(nowYm)} />
             ) : null}
             {kind !== "all" ? (
               <FilterChip label={kind === "income" ? "In" : "Out"} onClear={() => setKind("all")} />
