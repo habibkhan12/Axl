@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, CarFront, Download, Hash, Plus, Receipt, Scale, Trash2, X } from "lucide-react";
+import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, CarFront, Download, FileSpreadsheet, Hash, Plus, Receipt, Scale, Trash2, Upload, X } from "lucide-react";
 import { useDb, useDbContext } from "@/lib/local-db";
 import type { Transaction, Kind } from "@/lib/types";
 // (canEdit comes from useDbContext)
@@ -26,6 +26,8 @@ import {
 } from "@/components/ui";
 import { PageHeader, useQuickEntry } from "@/components/app-shell";
 import { CalendarPicker } from "@/components/date-picker";
+import { ImportTransactionsDialog } from "@/components/import-transactions";
+import { downloadCsv, downloadXlsx } from "@/lib/spreadsheet";
 
 type SortKey = "date" | "amount";
 
@@ -50,6 +52,7 @@ export default function TransactionsPage() {
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [flashId, setFlashId] = useState<string | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
 
   const from = day ?? monthBounds(ym).from;
   const to = day ?? monthBounds(ym).to;
@@ -128,20 +131,29 @@ export default function TransactionsPage() {
     }
   }
 
+  const exportHeader = ["Date", "Type", "Party", "Category", "Method", "Job Ref", "Voucher", "Description", "Notes", "Amount", "Entered By"];
+  const exportCells = (amount: (t: Transaction) => string | number) =>
+    rows.map((t) => [
+      t.txn_date,
+      t.kind,
+      nameOf.party(t.party_id),
+      nameOf.category(t.category_id),
+      nameOf.method(t.payment_method_id),
+      t.job_ref ?? "",
+      t.voucher_no ?? "",
+      t.description ?? "",
+      t.notes ?? "",
+      amount(t),
+      nameOf.user(t.created_by),
+    ]);
+
   function exportCsv() {
-    const header = ["Date", "Type", "Party", "Category", "Method", "Job Ref", "Voucher", "Description", "Notes", "Amount", "Entered By"];
-    const lines = rows.map((t) =>
-      [t.txn_date, t.kind, nameOf.party(t.party_id), nameOf.category(t.category_id), nameOf.method(t.payment_method_id), t.job_ref ?? "", t.voucher_no ?? "", t.description ?? "", t.notes ?? "", t.amount.toFixed(2), nameOf.user(t.created_by)]
-        .map((cell) => '"' + String(cell).replace(/"/g, '""') + '"')
-        .join(",")
-    );
-    const csv = [header.join(","), ...lines].join("\r\n");
-    const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `axl-transactions-${ym}.csv`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    downloadCsv(`axl-transactions-${ym}.csv`, [exportHeader, ...exportCells((t) => t.amount.toFixed(2))]);
+  }
+
+  function exportXlsx() {
+    // Amount stays a real number so totals and sorting work inside Excel.
+    void downloadXlsx(`axl-transactions-${ym}.xlsx`, "Transactions", [exportHeader, ...exportCells((t) => t.amount)], [12, 10, 20, 16, 14, 12, 12, 30, 24, 12, 14]);
   }
 
   function toggleSelect(id: string) {
@@ -178,6 +190,14 @@ export default function TransactionsPage() {
             <Button onClick={exportCsv}>
               <Download size={13} /> Export CSV
             </Button>
+            <Button onClick={exportXlsx}>
+              <FileSpreadsheet size={13} /> Export Excel
+            </Button>
+            {canEditTxn ? (
+              <Button onClick={() => setImportOpen(true)}>
+                <Upload size={13} /> Import data
+              </Button>
+            ) : null}
             {canEditTxn ? (
               <Button variant="primary" onClick={() => openQuickEntry("expense")}>
                 <Plus size={13} /> New entry
@@ -442,6 +462,8 @@ export default function TransactionsPage() {
       </Card>
 
       <ViewModal tx={viewing} onClose={() => setViewing(null)} canWrite={canEditTxn} nameOf={nameOf} onSave={(id, patch) => { setDb((prev) => (prev ? updateTransaction(prev, id, patch) : prev)); setViewing(null); }} />
+
+      <ImportTransactionsDialog open={importOpen} onClose={() => setImportOpen(false)} />
 
       <ConfirmDelete
         open={bulkDeleting}
