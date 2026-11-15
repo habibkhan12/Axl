@@ -50,8 +50,13 @@ export const SEED_PAYMENT_METHODS: PaymentMethod[] = [
 export function freshDb(): Database {
   return {
     parties: [],
+    quotes: [],
     staff: [],
     staff_documents: [],
+    staff_overtime: [],
+    staff_leaves: [],
+    staff_fines: [],
+    staff_transactions: [],
     categories: SEED_CATEGORIES,
     vehicles: SEED_VEHICLES,
     payment_methods: SEED_PAYMENT_METHODS,

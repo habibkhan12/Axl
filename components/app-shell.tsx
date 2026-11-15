@@ -2,12 +2,12 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ArrowLeftRight, Bell, CarFront, Grid2X2, Landmark, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Plus, Search, Settings2, Truck, UserRound, Users, X } from "lucide-react";
+import { ArrowLeftRight, Bell, CarFront, FileSignature, Grid2X2, Landmark, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Plus, Search, Settings2, Truck, UserRound, Users, X } from "lucide-react";
 import type { Kind } from "@/lib/types";
 import { DbProvider, useDbContext, canViewPage } from "@/lib/local-db";
 import { activeUser } from "@/lib/repo";
 import { AuthGate } from "@/components/auth-gate";
-import { Avatar, useKeyboardShortcut } from "@/components/ui";
+import { Avatar, Button, Modal, useKeyboardShortcut } from "@/components/ui";
 import { loadNotifs, markAllRead, markRead, notifTarget, type NotifEvent } from "@/lib/notifications";
 
 function NotificationBell() {
@@ -105,8 +105,9 @@ const NAV = [
   { href: "/transactions", label: "Transactions", icon: ArrowLeftRight, section: "main" },
   { href: "/suppliers", label: "Suppliers", icon: Truck, section: "main" },
   { href: "/clients", label: "Clients", icon: Users, section: "main" },
+  { href: "/quotes", label: "Quotations", icon: FileSignature, section: "main" },
   { href: "/fleet", label: "Fleet", icon: CarFront, section: "main" },
-  { href: "/personnel", label: "Personnel", icon: UserRound, section: "main" },
+  { href: "/personnel", label: "Employee", icon: UserRound, section: "main" },
   { href: "/dues", label: "Dues & fines", icon: Landmark, section: "main" },
   { href: "/settings", label: "Settings", icon: Settings2, section: "manage" },
 ] as const;
@@ -116,8 +117,9 @@ const PAGE_LABELS: Record<string, string> = {
   "/transactions": "Transactions",
   "/suppliers": "Suppliers",
   "/clients": "Clients",
+  "/quotes": "Quotations",
   "/fleet": "Fleet",
-  "/personnel": "Personnel",
+  "/personnel": "Employee",
   "/dues": "Dues & fines",
   "/settings": "Settings",
 };
@@ -152,9 +154,10 @@ function SaveStatus() {
 
 /** Open Quick Entry, optionally pre-attached to a supplier/client profile. */
 export type QuickEntryParty = { id: string; name: string };
+export type QuickEntryQuote = { id: string; quote_no: string };
 
 interface QuickEntryContextValue {
-  openQuickEntry: (kind?: Kind, party?: QuickEntryParty | null) => void;
+  openQuickEntry: (kind?: Kind, party?: QuickEntryParty | null, quote?: QuickEntryQuote | null) => void;
 }
 
 const QuickEntryContext = createContext<QuickEntryContextValue>({ openQuickEntry: () => {} });
@@ -170,6 +173,7 @@ function Shell({ children }: { children: React.ReactNode }) {
   const [qeOpen, setQeOpen] = useState(false);
   const [qeKind, setQeKind] = useState<Kind>("expense");
   const [qeParty, setQeParty] = useState<QuickEntryParty | null>(null);
+  const [qeQuote, setQeQuote] = useState<QuickEntryQuote | null>(null);
   const [palOpen, setPalOpen] = useState(false);
   const [collapsed, setCollapsedInit] = useState<boolean>(() => (typeof window !== "undefined" ? window.localStorage.getItem("axl-sidebar-collapsed") === "1" : false));
   const setCollapsed = (v: boolean) => {
@@ -185,6 +189,8 @@ function Shell({ children }: { children: React.ReactNode }) {
   }, []);
   const scrollRef = React.useRef<HTMLElement | null>(null);
   const [mobileNav, setMobileNav] = useState(false);
+  // Signing out is never a single-click action — it asks first.
+  const [askSignOut, setAskSignOut] = useState(false);
   const { session, profile, role, canEdit, signOut } = useDbContext();
 
   // Restricted accounts only see the tabs they were granted (admins see all).
@@ -201,11 +207,12 @@ function Shell({ children }: { children: React.ReactNode }) {
     scrollRef.current?.scrollTo({ top: 0 });
   }, [pathname]);
 
-  function openQuickEntry(kind: Kind = "expense", party: QuickEntryParty | null = null) {
+  function openQuickEntry(kind: Kind = "expense", party: QuickEntryParty | null = null, quote: QuickEntryQuote | null = null) {
     // Quick entry always creates a transaction — needs transactions edit access.
     if (!canEdit("/transactions")) return;
     setQeKind(kind);
     setQeParty(party);
+    setQeQuote(quote);
     setQeOpen(true);
   }
   useKeyboardShortcut("n", () => openQuickEntry("expense"));
@@ -366,7 +373,7 @@ function Shell({ children }: { children: React.ReactNode }) {
                         <div className="truncate text-xs font-semibold text-zinc-900">{user.name}</div>
                         <div className="truncate text-[10px] text-zinc-400">{email || role}</div>
                       </div>
-                      <UserMenu onSignOut={() => void signOut()} />
+                      <UserMenu onSignOut={() => setAskSignOut(true)} />
                     </div>
                   )
                 ) : collapsed ? (
@@ -457,7 +464,7 @@ function Shell({ children }: { children: React.ReactNode }) {
               ))}
               {session ? (
                 <button
-                  onClick={() => { setMobileNav(false); void signOut(); }}
+                  onClick={() => { setMobileNav(false); setAskSignOut(true); }}
                   className="mt-3 flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-medium text-zinc-500"
                 >
                   <LogOut size={15} /> Sign out
@@ -467,7 +474,23 @@ function Shell({ children }: { children: React.ReactNode }) {
           </div>
         ) : null}
 
-        <QuickEntry open={qeOpen} onClose={() => setQeOpen(false)} db={db} setDb={setDb} initialKind={qeKind} initialParty={qeParty} />
+        <Modal open={askSignOut} onClose={() => setAskSignOut(false)} title="Sign out?">
+          <p className="mb-4 text-sm text-zinc-600">You’ll need to sign in again to get back into the books. Everything you’ve saved is already stored.</p>
+          <div className="flex justify-end gap-2">
+            <Button onClick={() => setAskSignOut(false)}>Cancel</Button>
+            <Button
+              variant="danger"
+              onClick={() => {
+                setAskSignOut(false);
+                void signOut();
+              }}
+            >
+              Sign out
+            </Button>
+          </div>
+        </Modal>
+
+        <QuickEntry open={qeOpen} onClose={() => setQeOpen(false)} db={db} setDb={setDb} initialKind={qeKind} initialParty={qeParty} initialQuote={qeQuote} />
         <CommandPalette open={palOpen} onClose={() => setPalOpen(false)} db={db} />
       </div>
     </QuickEntryContext.Provider>

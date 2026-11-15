@@ -14,18 +14,24 @@ export function getSchemaIssues(): string[] {
 
 export const PARTIES_SQL = "supabase/migrations/2026-11-14-suppliers-clients.sql";
 export const PERSONNEL_SQL = "supabase/migrations/2026-11-14-personnel-documents.sql";
+export const QUOTES_SQL = "supabase/migrations/2026-11-15-quotations.sql";
 
 export async function loadCloudDb(): Promise<Database> {
   schemaIssues = [];
   const sb = getSupabase();
-  const [tx, cats, vehs, pms, partiesRes, staffRes, staffDocsRes, profiles, settings] = await Promise.all([
+  const [tx, cats, vehs, pms, partiesRes, quotesRes, staffRes, staffDocsRes, otRes, leaveRes, fineRes, payRes, profiles, settings] = await Promise.all([
     sb.from("transactions").select("*").order("txn_date", { ascending: false }),
     sb.from("categories").select("*"),
     sb.from("vehicles").select("*"),
     sb.from("payment_methods").select("*"),
     sb.from("parties").select("*"),
+    sb.from("quotes").select("*"),
     sb.from("staff").select("*"),
     sb.from("staff_documents").select("*"),
+    sb.from("staff_overtime").select("*"),
+    sb.from("staff_leaves").select("*"),
+    sb.from("staff_fines").select("*"),
+    sb.from("staff_transactions").select("*"),
     sb.from("profiles").select("*"),
     sb.from("app_settings").select("*").eq("id", 1).maybeSingle(),
   ]);
@@ -54,20 +60,50 @@ export async function loadCloudDb(): Promise<Database> {
     );
   }
 
-  // Personnel tables / storage bucket arrive with their own migration.
-  if (staffRes.error || staffDocsRes.error) {
-    console.warn("personnel tables unavailable:", staffRes.error?.message ?? staffDocsRes.error?.message);
+  // Quotations arrive with their own migration.
+  if (quotesRes.error) {
+    console.warn("quotes table unavailable:", quotesRes.error.message);
     schemaIssues.push(
-      "Personnel needs a one-time database update: the public.staff / public.staff_documents tables and the " +
-        "staff-documents storage bucket are missing. Run " + PERSONNEL_SQL + " in the Supabase SQL editor, then reload."
+      "Quotations need a one-time database update: the public.quotes table and the transactions.quote_id column are missing. " +
+        "Run " + QUOTES_SQL + " in the Supabase SQL editor, then reload."
+    );
+  }
+
+  // Personnel tables / storage bucket arrive with their own migration.
+  if (staffRes.error || staffDocsRes.error || otRes.error || leaveRes.error || fineRes.error || payRes.error) {
+    console.warn(
+      "employee tables unavailable:",
+      staffRes.error?.message ?? staffDocsRes.error?.message ?? otRes.error?.message ?? leaveRes.error?.message ?? fineRes.error?.message ?? payRes.error?.message
+    );
+    schemaIssues.push(
+      "The Employee tab needs a one-time database update: the public.staff / staff_documents / staff_overtime / staff_leaves / " +
+        "staff_fines / staff_transactions tables and the staff-documents storage bucket are missing. Run " + PERSONNEL_SQL +
+        " in the Supabase SQL editor, then reload."
     );
   }
 
   return {
     transactions: (tx.data ?? []) as unknown as Database["transactions"],
     parties: (partiesRes.error ? [] : partiesRes.data ?? []) as unknown as Database["parties"],
+    quotes: ((quotesRes.error ? [] : quotesRes.data ?? []) as unknown as Database["quotes"]).map((q) => ({
+      ...q,
+      amount: num(q.amount, 0),
+    })),
     staff: (staffRes.error ? [] : staffRes.data ?? []) as unknown as Database["staff"],
     staff_documents: (staffDocsRes.error ? [] : staffDocsRes.data ?? []) as unknown as Database["staff_documents"],
+    staff_overtime: ((otRes.error ? [] : otRes.data ?? []) as unknown as Database["staff_overtime"]).map((r) => ({
+      ...r,
+      hours: num(r.hours, 0),
+    })),
+    staff_leaves: (leaveRes.error ? [] : leaveRes.data ?? []) as unknown as Database["staff_leaves"],
+    staff_fines: ((fineRes.error ? [] : fineRes.data ?? []) as unknown as Database["staff_fines"]).map((r) => ({
+      ...r,
+      amount: num(r.amount, 0),
+    })),
+    staff_transactions: ((payRes.error ? [] : payRes.data ?? []) as unknown as Database["staff_transactions"]).map((r) => ({
+      ...r,
+      amount: num(r.amount, 0),
+    })),
     categories: (cats.data ?? []) as unknown as Database["categories"],
     vehicles: (vehs.data ?? []) as unknown as Database["vehicles"],
     payment_methods: (pms.data ?? []) as unknown as Database["payment_methods"],

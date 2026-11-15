@@ -5,7 +5,7 @@ export type Role = "owner" | "editor" | "viewer";
 
 /** Per-tab access level. "none" = tab hidden entirely. */
 export type TabAccess = "none" | "view" | "edit";
-export type TabKey = "dashboard" | "transactions" | "suppliers" | "clients" | "fleet" | "personnel" | "dues" | "settings";
+export type TabKey = "dashboard" | "transactions" | "suppliers" | "clients" | "quotes" | "fleet" | "personnel" | "dues" | "settings";
 
 /** What tabs a non-admin account can see/edit. Admin always sees everything. */
 export interface TabAccessMap {
@@ -13,6 +13,7 @@ export interface TabAccessMap {
   transactions?: TabAccess;
   suppliers?: TabAccess;
   clients?: TabAccess;
+  quotes?: TabAccess;
   fleet?: TabAccess;
   personnel?: TabAccess;
   dues?: TabAccess;
@@ -71,6 +72,8 @@ export interface Transaction {
   payment_method_id?: string | null;
   /** Supplier on an expense, client on an income entry. */
   party_id?: string | null;
+  /** Quotation (project) this entry belongs to. */
+  quote_id?: string | null;
   vehicle_id?: string | null; // only meaningful for Fuel / Vehicles
   fuel_liters?: number | null;
   job_ref?: string | null; // "AY12017"
@@ -97,13 +100,75 @@ export interface Settings {
   active_user_id: string; // localStorage stand-in for auth.session
 }
 
-/** A staff member tracked on the Personnel tab. */
+/** Where a quotation sits in its life cycle. */
+export type QuoteStatus = "review" | "approved" | "completed" | "rejected";
+
+/** A quotation — treated as a project once approved. */
+export interface Quote {
+  id: string;
+  quote_no: string;
+  /** The client party this quote belongs to. */
+  client_id?: string | null;
+  amount: number;
+  status: QuoteStatus;
+  quote_date?: string | null;
+  notes?: string | null;
+  created_at?: string;
+}
+
+/** An employee tracked on the Employee tab. */
 export interface StaffMember {
   id: string;
   name: string;
   phone?: string | null;
   notes?: string | null;
+  /** Monthly salary. Optional — some staff are paid per job. */
+  salary?: number | null;
+  /** Pay per overtime hour, used to turn logged hours into money. */
+  overtime_rate?: number | null;
   archived?: boolean;
+  created_at?: string;
+}
+
+/** One day's overtime for an employee. */
+export interface StaffOvertime {
+  id: string;
+  staff_id: string;
+  work_date: string;
+  hours: number;
+  note?: string | null;
+  created_at?: string;
+}
+
+/** A fine deducted from an employee's pay. */
+export interface StaffFine {
+  id: string;
+  staff_id: string;
+  /** Why the employee is being charged. */
+  reason: string;
+  amount: number;
+  fine_date: string;
+  created_at?: string;
+}
+
+/** A leave period, inclusive of both dates. */
+export interface StaffLeave {
+  id: string;
+  staff_id: string;
+  from_date: string;
+  to_date: string;
+  note?: string | null;
+  created_at?: string;
+}
+
+/** Money handed to an employee (`paid`) or received from them (`received`). */
+export interface StaffTransaction {
+  id: string;
+  staff_id: string;
+  kind: "paid" | "received";
+  amount: number;
+  txn_date: string;
+  note?: string | null;
   created_at?: string;
 }
 
@@ -126,8 +191,13 @@ export interface StaffDocument {
 export interface Database {
   vehicles: Vehicle[];
   parties: Party[];
+  quotes: Quote[];
   staff: StaffMember[];
   staff_documents: StaffDocument[];
+  staff_overtime: StaffOvertime[];
+  staff_leaves: StaffLeave[];
+  staff_fines: StaffFine[];
+  staff_transactions: StaffTransaction[];
   categories: Category[];
   payment_methods: PaymentMethod[];
   transactions: Transaction[];

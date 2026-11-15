@@ -1,8 +1,8 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, CarFront, Download, Hash, Plus, Receipt, Scale, Trash2, X } from "lucide-react";
+import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, CarFront, Download, FileSignature, FileSpreadsheet, Hash, Plus, Receipt, Scale, Trash2, Upload, X } from "lucide-react";
 import { useDb, useDbContext } from "@/lib/local-db";
-import type { Transaction, Kind, Party } from "@/lib/types";
+import type { Transaction, Kind, Party, Quote } from "@/lib/types";
 // (canEdit comes from useDbContext)
 import type { TransactionInput } from "@/lib/store";
 import { updateTransaction, ensureParty } from "@/lib/repo";
@@ -27,6 +27,9 @@ import {
 import { PageHeader, useQuickEntry } from "@/components/app-shell";
 import { CalendarPicker } from "@/components/date-picker";
 import { PartyInput } from "@/components/party-input";
+import { ImportTransactionsDialog } from "@/components/import-transactions";
+import { QuoteInput } from "@/components/quote-input";
+import { downloadCsv, downloadXlsx } from "@/lib/spreadsheet";
 
 type SortKey = "date" | "amount";
 
@@ -51,6 +54,7 @@ export default function TransactionsPage() {
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [flashId, setFlashId] = useState<string | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
 
   const from = day ?? monthBounds(ym).from;
   const to = day ?? monthBounds(ym).to;
@@ -61,6 +65,7 @@ export default function TransactionsPage() {
     vehicle: (id: string | null | undefined) => db.vehicles.find((v) => v.id === id)?.label ?? "",
     user: (id: string) => db.users.find((u) => u.id === id)?.name ?? "—",
     party: (id: string | null | undefined) => db.parties.find((p) => p.id === id)?.name ?? "—",
+    quote: (id: string | null | undefined) => db.quotes.find((q) => q.id === id)?.quote_no ?? "—",
   };
 
   const rows = useMemo(() => {
@@ -129,20 +134,29 @@ export default function TransactionsPage() {
     }
   }
 
+  const exportHeader = ["Date", "Type", "Party", "Category", "Method", "Job Ref", "Voucher", "Description", "Notes", "Amount", "Entered By"];
+  const exportCells = (amount: (t: Transaction) => string | number) =>
+    rows.map((t) => [
+      t.txn_date,
+      t.kind,
+      nameOf.party(t.party_id),
+      nameOf.category(t.category_id),
+      nameOf.method(t.payment_method_id),
+      t.job_ref ?? "",
+      t.voucher_no ?? "",
+      t.description ?? "",
+      t.notes ?? "",
+      amount(t),
+      nameOf.user(t.created_by),
+    ]);
+
   function exportCsv() {
-    const header = ["Date", "Type", "Party", "Category", "Method", "Job Ref", "Voucher", "Description", "Notes", "Amount", "Entered By"];
-    const lines = rows.map((t) =>
-      [t.txn_date, t.kind, nameOf.party(t.party_id), nameOf.category(t.category_id), nameOf.method(t.payment_method_id), t.job_ref ?? "", t.voucher_no ?? "", t.description ?? "", t.notes ?? "", t.amount.toFixed(2), nameOf.user(t.created_by)]
-        .map((cell) => '"' + String(cell).replace(/"/g, '""') + '"')
-        .join(",")
-    );
-    const csv = [header.join(","), ...lines].join("\r\n");
-    const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `axl-transactions-${ym}.csv`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    downloadCsv(`axl-transactions-${ym}.csv`, [exportHeader, ...exportCells((t) => t.amount.toFixed(2))]);
+  }
+
+  function exportXlsx() {
+    // Amount stays a real number so totals and sorting work inside Excel.
+    void downloadXlsx(`axl-transactions-${ym}.xlsx`, "Transactions", [exportHeader, ...exportCells((t) => t.amount)], [12, 10, 20, 16, 14, 12, 12, 30, 24, 12, 14]);
   }
 
   function toggleSelect(id: string) {
@@ -179,6 +193,14 @@ export default function TransactionsPage() {
             <Button onClick={exportCsv}>
               <Download size={13} /> Export CSV
             </Button>
+            <Button onClick={exportXlsx}>
+              <FileSpreadsheet size={13} /> Export Excel
+            </Button>
+            {canEditTxn ? (
+              <Button onClick={() => setImportOpen(true)}>
+                <Upload size={13} /> Import data
+              </Button>
+            ) : null}
             {canEditTxn ? (
               <Button variant="primary" onClick={() => openQuickEntry("expense")}>
                 <Plus size={13} /> New entry
@@ -418,6 +440,12 @@ export default function TransactionsPage() {
                             {nameOf.vehicle(t.vehicle_id)}
                           </span>
                         ) : null}
+                        {t.quote_id ? (
+                          <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">
+                            <FileSignature size={9} />
+                            {nameOf.quote(t.quote_id)}
+                          </span>
+                        ) : null}
                         {t.voucher_no ? <span className="text-[10px] text-zinc-400">V {t.voucher_no}</span> : null}
                       </div>
                     </td>
@@ -448,6 +476,7 @@ export default function TransactionsPage() {
         canWrite={canEditTxn}
         nameOf={nameOf}
         parties={db.parties}
+        quotes={db.quotes}
         onSave={(id, patch, partyName) => {
           setDb((prev) => {
             if (!prev) return prev;
@@ -459,6 +488,8 @@ export default function TransactionsPage() {
           setViewing(null);
         }}
       />
+
+      <ImportTransactionsDialog open={importOpen} onClose={() => setImportOpen(false)} />
 
       <ConfirmDelete
         open={bulkDeleting}
@@ -492,13 +523,15 @@ function ViewModal({
   canWrite,
   nameOf,
   parties,
+  quotes,
 }: {
   tx: Transaction | null;
   onClose: () => void;
   onSave: (id: string, patch: Partial<TransactionInput>, partyName: string) => void;
   canWrite: boolean;
-  nameOf: { category: (id: string | null | undefined) => string; method: (id: string | null | undefined) => string; vehicle: (id: string | null | undefined) => string; user: (id: string) => string; party: (id: string | null | undefined) => string };
+  nameOf: { category: (id: string | null | undefined) => string; method: (id: string | null | undefined) => string; vehicle: (id: string | null | undefined) => string; user: (id: string) => string; party: (id: string | null | undefined) => string; quote: (id: string | null | undefined) => string };
   parties: Party[];
+  quotes: Quote[];
 }) {
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState("");
@@ -506,6 +539,7 @@ function ViewModal({
   const [jobRef, setJobRef] = useState("");
   const [notes, setNotes] = useState("");
   const [partyName, setPartyName] = useState("");
+  const [quoteNo, setQuoteNo] = useState("");
 
   useEffect(() => {
     if (tx) {
@@ -515,8 +549,9 @@ function ViewModal({
       setJobRef(tx.job_ref ?? "");
       setNotes(tx.notes ?? "");
       setPartyName(tx.party_id ? parties.find((p) => p.id === tx.party_id)?.name ?? "" : "");
+      setQuoteNo(quotes.find((q) => q.id === tx.quote_id)?.quote_no ?? "");
     }
-  }, [tx, parties]);
+  }, [tx, parties, quotes]);
 
   if (!tx) return null;
 
@@ -526,6 +561,7 @@ function ViewModal({
     ["Payment method", nameOf.method(tx.payment_method_id), "pm"],
     ["Vehicle", nameOf.vehicle(tx.vehicle_id), "veh"],
     ["Fuel liters", tx.fuel_liters ? tx.fuel_liters + " L" : null, "l"],
+    ["Quotation", nameOf.quote(tx.quote_id), "q"],
     ["Voucher", tx.voucher_no, "vc"],
     ["Entered by", nameOf.user(tx.created_by), "by"],
     ["Logged at", fmtDate(tx.created_at.slice(0, 10)) + " · " + fmtTime(tx.created_at), "at"],
@@ -543,7 +579,9 @@ function ViewModal({
           {canWrite ? (
             <Button
               variant="primary"
-              onClick={() =>
+              onClick={() => {
+                const typed = quoteNo.trim();
+                const resolved = typed ? quotes.find((q) => q.quote_no.trim().toLowerCase() === typed.toLowerCase() && (q.status === "approved" || q.status === "completed")) ?? null : null;
                 onSave(
                   tx.id,
                   {
@@ -552,10 +590,12 @@ function ViewModal({
                     description: desc,
                     job_ref: jobRef,
                     notes,
+                    // Blank clears the link; an unresolved number leaves it untouched.
+                    ...(typed === "" ? { quote_id: null } : resolved ? { quote_id: resolved.id } : {}),
                   },
                   partyName
-                )
-              }
+                );
+              }}
             >
               Save changes
             </Button>
@@ -602,6 +642,17 @@ function ViewModal({
             <Label>Notes</Label>
             <Input value={notes} onChange={(e) => setNotes(e.target.value)} disabled={!canWrite} placeholder="—" />
           </div>
+        </div>
+        <div>
+          <Label>Quotation (project)</Label>
+          <QuoteInput
+            value={quoteNo}
+            onChange={setQuoteNo}
+            quotes={quotes.filter((q) => q.status === "approved" || q.status === "completed")}
+            clientName={(id) => nameOf.party(id)}
+            disabled={!canWrite}
+            placeholder="Optional — type a quotation number"
+          />
         </div>        <dl className="space-y-0 divide-y divide-[#f1f1ef] border-t border-[#f1f1ef] pt-1">
           {meta
             .filter(([, v]) => v !== null && v !== "" && v !== "—")

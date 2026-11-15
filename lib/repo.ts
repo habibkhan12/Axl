@@ -1,4 +1,4 @@
-import type { Database, Transaction, Category, Vehicle, PaymentMethod, User, Party, PartyKind, StaffMember, StaffDocument } from "./types";
+import type { Database, Transaction, Category, Vehicle, PaymentMethod, User, Party, PartyKind, StaffMember, StaffDocument, Quote } from "./types";
 import type { TransactionInput } from "./store";
 
 export function uid(prefix: string): string {
@@ -17,6 +17,7 @@ export function addTransaction(db: Database, input: TransactionInput): Database 
     category_id: input.category_id ?? null,
     payment_method_id: input.payment_method_id ?? null,
     party_id: input.party_id ?? null,
+    quote_id: input.quote_id ?? null,
     vehicle_id: input.vehicle_id ?? null,
     fuel_liters: input.fuel_liters ?? null,
     job_ref: input.job_ref?.trim() ? input.job_ref.trim() : null,
@@ -71,6 +72,51 @@ export function upsertStaffDocument(db: Database, doc: StaffDocument): Database 
 
 export function deleteStaffDocument(db: Database, id: string): Database {
   return { ...db, staff_documents: db.staff_documents.filter((d) => d.id !== id) };
+}
+
+/** Insert-or-replace a row in any list keyed by `id` (overtime, leave, payments). */
+export function upsertQuote(db: Database, quote: Quote): Database {
+  const exists = db.quotes.some((q) => q.id === quote.id);
+  return { ...db, quotes: exists ? db.quotes.map((q) => (q.id === quote.id ? quote : q)) : [...db.quotes, quote] };
+}
+
+/** Quotes that may take income/expense entries — approved or already completed. */
+export function isQuoteOpen(quote: Quote): boolean {
+  return quote.status === "approved" || quote.status === "completed";
+}
+
+/** Next free quotation number, keeping whatever prefix/padding is already in use. */
+export function nextQuoteNo(db: Database): string {
+  let highest = -1;
+  let prefix = "Q-";
+  let pad = 3;
+  for (const q of db.quotes) {
+    const m = /^(.*?)(\d+)$/.exec(q.quote_no.trim());
+    if (!m) continue;
+    const n = Number(m[2]);
+    if (!Number.isFinite(n)) continue;
+    if (n > highest) {
+      highest = n;
+      prefix = m[1];
+      pad = Math.max(3, m[2].length);
+    }
+  }
+  return highest < 0 ? "Q-001" : prefix + String(highest + 1).padStart(pad, "0");
+}
+
+/** Resolve typed text to a quote that can take entries (by number, case-insensitive). */
+export function findOpenQuote(db: Database, quoteNo: string): Quote | undefined {
+  const needle = quoteNo.trim().toLowerCase();
+  if (!needle) return undefined;
+  return db.quotes.find((q) => q.quote_no.trim().toLowerCase() === needle && isQuoteOpen(q));
+}
+
+export function upsertById<T extends { id: string }>(list: T[], row: T): T[] {
+  return list.some((x) => x.id === row.id) ? list.map((x) => (x.id === row.id ? row : x)) : [...list, row];
+}
+
+export function removeById<T extends { id: string }>(list: T[], id: string): T[] {
+  return list.filter((x) => x.id !== id);
 }
 
 export function upsertParty(db: Database, party: Party): Database {

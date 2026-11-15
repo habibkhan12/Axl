@@ -2,11 +2,12 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { Database, Kind, PartyKind } from "@/lib/types";
 import type { TransactionInput } from "@/lib/store";
-import { addTransaction, ensureParty } from "@/lib/repo";
+import { addTransaction, ensureParty, findOpenQuote } from "@/lib/repo";
 import { todayISO, fmtAED } from "@/lib/format";
 import { Button, Input, Label, Modal, SelectMenu, Toast } from "@/components/ui";
 import { DatePicker } from "@/components/date-picker";
 import { PartyInput } from "@/components/party-input";
+import { QuoteInput } from "@/components/quote-input";
 import { useDbContext } from "@/lib/local-db";
 
 export function QuickEntry({
@@ -16,6 +17,7 @@ export function QuickEntry({
   setDb,
   initialKind = "expense",
   initialParty = null,
+  initialQuote = null,
 }: {
   open: boolean;
   onClose: () => void;
@@ -24,6 +26,8 @@ export function QuickEntry({
   initialKind?: Kind;
   /** Supplier/client profile the entry was started from — attached on save. */
   initialParty?: { id: string; name: string } | null;
+  /** Quotation the entry was started from — pre-fills the quote number. */
+  initialQuote?: { id: string; quote_no: string } | null;
 }) {
   const { session, profile } = useDbContext();
   const [kind, setKind] = useState<Kind>(initialKind);
@@ -39,6 +43,7 @@ export function QuickEntry({
   const [notes, setNotes] = useState("");
   const [partyName, setPartyName] = useState("");
   const [partyId, setPartyId] = useState<string | null>(null);
+  const [quoteNo, setQuoteNo] = useState("");
   const [keepEntering, setKeepEntering] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
   const [todayCount, setTodayCount] = useState(0);
@@ -67,6 +72,7 @@ export function QuickEntry({
     setNotes("");
     setPartyName(initialParty?.name ?? "");
     setPartyId(initialParty?.id ?? null);
+    setQuoteNo(initialQuote?.quote_no ?? "");
     const t = todayISO();
     setTodayCount(db.transactions.filter((x) => x.txn_date === t).length);
     setTimeout(() => amountRef.current?.focus(), 50);
@@ -87,6 +93,13 @@ export function QuickEntry({
       setToast("Enter an amount first");
       return;
     }
+    // A typed quotation must resolve to an approved/completed quote.
+    const quote = quoteNo.trim() ? findOpenQuote(db, quoteNo) : undefined;
+    if (quoteNo.trim() && !quote) {
+      const known = db.quotes.find((q) => q.quote_no.trim().toLowerCase() === quoteNo.trim().toLowerCase());
+      setToast(known ? `Quotation ${known.quote_no} is ${known.status === "review" ? "under review" : "rejected"} — it cannot take entries` : `No quotation “${quoteNo.trim()}” exists`);
+      return;
+    }
     const lockedParty = partyId ? db.parties.find((p) => p.id === partyId) ?? null : null;
     const input: TransactionInput = {
       kind,
@@ -98,6 +111,7 @@ export function QuickEntry({
       fuel_liters: isFuel && liters ? parseFloat(liters) : null,
       job_ref: jobRef || null,
       voucher_no: voucher || null,
+      quote_id: quote?.id ?? null,
       description: desc || null,
       notes: notes || null,
       // Cloud mode: must be the real auth profile id (FK to profiles).
@@ -212,9 +226,20 @@ export function QuickEntry({
             />
           </div>
           <div>
-            <Label>{kind === "expense" ? "Bill / invoice no." : "Quotation no."}</Label>
+            <Label>{kind === "expense" ? "Bill / invoice no." : "Voucher / invoice no."}</Label>
             <Input value={voucher} onChange={(e) => setVoucher(e.target.value)} placeholder="optional" />
           </div>
+        </div>
+
+        <div>
+          <Label>Quotation (project)</Label>
+          <QuoteInput
+            value={quoteNo}
+            onChange={setQuoteNo}
+            quotes={db.quotes.filter((q) => q.status === "approved" || q.status === "completed")}
+            clientName={(id) => db.parties.find((p) => p.id === id)?.name ?? ""}
+            placeholder="Optional — type a quotation number"
+          />
         </div>
 
         {isFuel && (

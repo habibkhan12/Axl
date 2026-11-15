@@ -4,11 +4,12 @@ import { AlertTriangle, Download, FileText, Image as ImageIcon, Pencil, Plus, Tr
 import { PageHeader } from "@/components/app-shell";
 import { Button, Card, EmptyState, Input, Label, MicroLabel, Modal, SearchInput, SlideOver, StatCard, Toast } from "@/components/ui";
 import { DatePicker } from "@/components/date-picker";
+import { EmployeeOverview, FinesPanel, LeavePanel, OvertimePanel, PaymentsPanel } from "@/components/employee-panels";
 import { useDb, useDbContext } from "@/lib/local-db";
 import { deleteStaffDocument, upsertStaff, upsertStaffDocument } from "@/lib/repo";
 import { SUPABASE_READY } from "@/lib/supabase";
 import { MAX_DOC_BYTES, readAsDataUrl, removeStaffFile, safeFileName, signedStaffUrl, uploadStaffFile } from "@/lib/staff-storage";
-import { fmtDate, todayISO } from "@/lib/format";
+import { fmtAED, fmtDate, todayISO } from "@/lib/format";
 import type { StaffDocument, StaffMember } from "@/lib/types";
 
 /** Anything expiring inside this window is flagged as "expiring soon". */
@@ -147,7 +148,7 @@ export function PersonnelPage() {
   return (
     <div>
       <PageHeader
-        title="Personnel"
+        title="Employees"
         subtitle="Team records and their documents — passports, visas, licences — with expiry tracking."
         actions={
           editable ? (
@@ -204,7 +205,7 @@ export function PersonnelPage() {
 
         {rows.length === 0 ? (
           <div className="p-6">
-            <EmptyState icon={<UserRound size={18} />} title="No personnel yet" hint={editable ? "Add a person, then attach their documents." : "Ask an admin to add personnel."} />
+            <EmptyState icon={<UserRound size={18} />} title="No employees yet" hint={editable ? "Add an employee, then attach their documents." : "Ask an admin to add employees."} />
             {editable ? (
               <div className="mt-3 flex justify-center">
                 <Button variant="primary" onClick={() => setAdding(true)}>
@@ -351,6 +352,16 @@ function PersonDrawer({
   onDownload: (doc: StaffDocument) => void;
   onDelete: (doc: StaffDocument) => void;
 }) {
+  type Panel = "overview" | "docs" | "overtime" | "fines" | "leave" | "money";
+  const [tab, setTab] = useState<Panel>("overview");
+  const tabs: { key: Panel; label: string }[] = [
+    { key: "overview", label: "Overview" },
+    { key: "docs", label: documents.length ? `Documents (${documents.length})` : "Documents" },
+    { key: "overtime", label: "Overtime" },
+    { key: "fines", label: "Fines" },
+    { key: "leave", label: "Leave" },
+    { key: "money", label: "Payments" },
+  ];
   return (
     <SlideOver
       open
@@ -367,7 +378,7 @@ function PersonDrawer({
       footer={
         <>
           <Button onClick={onClose}>Close</Button>
-          {editable ? (
+          {editable && tab === "docs" ? (
             <Button variant="primary" onClick={onNewDoc}>
               <Plus size={13} /> New Document
             </Button>
@@ -376,10 +387,14 @@ function PersonDrawer({
       }
     >
       <div className="space-y-4 p-5">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-3 gap-3">
           <div>
             <MicroLabel>Contact number</MicroLabel>
-            <div className="mt-1 text-[13px] font-medium text-zinc-800">{person.phone || "—"}</div>
+            <div className="mt-1 truncate text-[13px] font-medium text-zinc-800">{person.phone || "—"}</div>
+          </div>
+          <div>
+            <MicroLabel>Salary</MicroLabel>
+            <div className="mt-1 truncate text-[13px] font-medium text-zinc-800">{person.salary != null ? fmtAED(person.salary) : "—"}</div>
           </div>
           <div>
             <MicroLabel>Documents</MicroLabel>
@@ -389,7 +404,32 @@ function PersonDrawer({
 
         {person.notes ? <p className="rounded-xl border border-[#e9e9e6] bg-[#fbfbfa] px-3 py-2 text-[12px] leading-snug text-zinc-600">{person.notes}</p> : null}
 
-        <div>
+        <div className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-0.5">
+          {tabs.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={
+                "shrink-0 rounded-lg border px-2.5 py-1.5 text-[11px] font-medium transition-colors " +
+                (tab === t.key ? "border-zinc-900 bg-zinc-900 text-white" : "border-[#e5e5e2] bg-white text-zinc-500 hover:border-zinc-400 hover:text-zinc-800")
+              }
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {tab === "overview" ? <EmployeeOverview person={person} editable={editable} /> : null}
+
+        {tab === "overtime" ? <OvertimePanel person={person} editable={editable} /> : null}
+
+        {tab === "fines" ? <FinesPanel person={person} editable={editable} /> : null}
+
+        {tab === "leave" ? <LeavePanel person={person} editable={editable} /> : null}
+
+        {tab === "money" ? <PaymentsPanel person={person} editable={editable} /> : null}
+
+        <div className={tab === "docs" ? "" : "hidden"}>
           <MicroLabel className="mb-2">Documents</MicroLabel>
           {documents.length === 0 ? (
             <div className="rounded-xl border border-dashed border-[#e5e5e2] px-3 py-4 text-[12px] text-zinc-400">
@@ -440,11 +480,13 @@ function PersonDrawer({
           )}
         </div>
 
-        <p className="text-[10px] leading-relaxed text-zinc-300">
-          {SUPABASE_READY
-            ? "Files are stored in the private staff-documents bucket — only signed-in accounts can open them."
-            : "Local mode: files are kept in this browser. Connect Supabase to store them in the cloud."}
-        </p>
+        {tab === "docs" ? (
+          <p className="text-[10px] leading-relaxed text-zinc-300">
+            {SUPABASE_READY
+              ? "Files are stored in the private staff-documents bucket — only signed-in accounts can open them."
+              : "Local mode: files are kept in this browser. Connect Supabase to store them in the cloud."}
+          </p>
+        ) : null}
       </div>
     </SlideOver>
   );
